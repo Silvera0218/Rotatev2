@@ -17,6 +17,7 @@
   const RULES = Object.freeze({
     levels: 5, scoreGoals: [45, 80, 120, 180, 240], diceTypes:[4,6,8,12], diceRouteVersion:root.LITE_DICE_ROUTES.design_version,
     rewardMix:{twoNewChance:1/3,jackpotInclusionChance:0.08},
+    diceCombos:[{id:'triple',name:'豹子',coins:15},{id:'straight',name:'顺子',coins:8}],
     dropLimit: 24, rotorDropChance: 0.06,
     coinReward: 5, clearCoins: 5, toolPrice: 5, shopSlots: 8, bonusPerCell: 5, buffs: BUFFS,
     tools: [
@@ -286,6 +287,10 @@
       const sides=[...this.litePrepareDice()];
       const values = sides.map(sides => 1 + Math.floor(this.liteRandom() * sides));
       const total = values.reduce((sum, value) => sum + value, 0);
+      const sorted=[...values].sort((a,b)=>a-b);
+      const comboId=sorted[0]===sorted[2]?'triple':sorted[1]===sorted[0]+1&&sorted[2]===sorted[1]+1?'straight':null;
+      const combo=comboId?{...RULES.diceCombos.find(c=>c.id===comboId),claimed:false}:null;
+      if(combo)combo.description=`金币 +${combo.coins}`;
       const route = this.liteRewardRanges(sides).find(r => total >= r.min && total <= r.max).id;
       const buffOptions = route === 'buff' ? this.liteRewardOptions('buff') : [];
       let coins = RULES.clearCoins;
@@ -299,7 +304,7 @@
       const nextStage=this.stage+1,preview={...this,stage:nextStage,outline:null};
       const restBuffs=route==='rest'?BUFFS.filter(buff=>!this.lite.buffs.includes(buff.id)):[];
       const rest=route==='rest'?{stage:nextStage,score:RULES.scoreGoals[nextStage]??originalTarget.call(preview).goals[0],coins:RULES.clearCoins,buff:restBuffs.length?restBuffs[Math.floor(this.liteRandom()*restBuffs.length)].id:null,convertedCoins:restBuffs.length?0:RULES.coinReward,claimed:false}:null;
-      this.lite.roll = { sides, values, total, route, routes, entered: false, coins, tools, toolOptions, chosenTool:null, specialKind:null, specialOptions,buffOptions, shopOffers, exchangeOptions,chosenExchange:null,gamble,rest,jackpotOptions,jackpotChosen:null,chosenBuff: null, settled: route==='shop',freeRefreshes:1,adRefreshes:3,adReadyAt:null };
+      this.lite.roll = { sides, values, total, combo, route, routes, entered: false, coins, tools, toolOptions, chosenTool:null, specialKind:null, specialOptions,buffOptions, shopOffers, exchangeOptions,chosenExchange:null,gamble,rest,jackpotOptions,jackpotChosen:null,chosenBuff: null, settled: route==='shop',freeRefreshes:1,adRefreshes:3,adReadyAt:null };
       this.events.push({ kind: 'lite-reward', reward: structuredClone(this.lite.roll) });
       return this.lite.roll;
     };
@@ -308,6 +313,7 @@
       if (!rewardPhase(this) || !roll || roll.entered) return false;
       roll.entered = true;
       this.lite.coins += roll.coins;
+      if(roll.combo&&!roll.combo.claimed){this.lite.coins+=roll.combo.coins;roll.combo.claimed=true;}
       for (const { id } of RULES.tools) this.lite.tools[id] = (this.lite.tools[id] || 0) + (roll.tools[id] || 0);
       this.lite.specials ||= [];
       this.events.push({ kind: 'lite-reward-enter', route: roll.route });

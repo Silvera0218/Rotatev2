@@ -14,6 +14,10 @@ replace_once('<title>ROTATION</title>', '<title>ROTATION · 骰子轻量版</tit
 replace_once('</head>', '<link rel="stylesheet" href="./lite-ui.css"><link rel="stylesheet" href="./lite-integration.css"><link rel="stylesheet" href="./lite-extra-rewards.css"></head>')
 replace_once('<script>(()=>{', '<script>globalThis.LITE_DICE_ROUTES='+dice_routes+';</script><script src="./lite-rules.js"></script><script src="./lite-dice-geometry.js"></script><script src="./lite-dice.js"></script><script src="./lite-transition.js"></script><script src="./lite-blocks.js"></script><script src="./lite-acquisition.js"></script><script src="./lite-extra-rewards.js"></script><script>(()=>{')
 replace_once('C5=RotationMechanics.makeScorer(C5);', 'C5=RotationMechanics.makeScorer(C5);globalThis.installRotationLite({Game:e9,mechanics:RotationMechanics});')
+# Charge only attached placements. Misses keep their existing life penalty,
+# and the next spawn must see the unchanged budget even on the last drop.
+replace_once('this.dropsUsed+=this.active.origin==="inserted"?nt.specialDropCost:nt.ordinaryDropCost,this.rotationCredited=!1', 'const liteDropCost=this.active.origin==="inserted"?nt.specialDropCost:nt.ordinaryDropCost;this.rotationCredited=!1')
+replace_once('if(this.build.placement.attached=r,r){let a=[];', 'if(this.build.placement.attached=r,r){this.dropsUsed+=liteDropCost;let a=[];')
 replace_once(' function medallion(id){', ''' Object.assign(buffArt,{'extra-moves':buffArt.patience,'shovel-supply':buffArt.frontier_edge,'clear-score':buffArt.spare_change,'bonus-score':buffArt.opening_act});
  function medallion(id){''')
 # Register lightweight destinations with the same pixel assembly effect as native dialogs.

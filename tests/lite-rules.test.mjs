@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { loadEngine, settle } from '../tools/simulate_balance.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
-const original = loadEngine(null, root + 'source/base-game.html');
+const original = loadEngine(null, root + 'index.html');
 const context = vm.createContext({ console, structuredClone, performance, LITE_DICE_ROUTES:JSON.parse(fs.readFileSync(new URL('../lite-dice-routes.json',import.meta.url),'utf8')) });
 vm.runInContext(original.source, context);
 vm.runInContext(fs.readFileSync(new URL('../lite-rules.js', import.meta.url), 'utf8'), context);
@@ -114,7 +114,7 @@ test('one sum selects Buff, entry credits once, and selection gates the next lev
   assert.equal(roll.values.join(','),'5,5,5');assert.equal(roll.total,15);assert.equal(roll.route,'buff');
   assert.equal(g.lite.coins,0);assert.equal(g.liteChooseBuff(roll.buffOptions[0]),false);
   assert.equal(g.liteNext(),false);assert.equal(g.liteRoll(),false);
-  assert.equal(g.liteEnterReward(),true);assert.equal(g.liteEnterReward(),false);assert.equal(g.lite.coins,5);
+  assert.equal(g.liteEnterReward(),true);assert.equal(g.liteEnterReward(),false);assert.equal(g.lite.coins,20);
   assert.equal(g.liteNext(),false);assert.equal(g.liteChooseBuff('unknown'),false);
   assert.equal(g.liteChooseBuff(roll.buffOptions[0]),true);assert.equal(g.liteChooseBuff(roll.buffOptions[1]),false);
   assert.equal(g.liteNext(),true);assert.equal(g.stage,1);
@@ -203,6 +203,23 @@ test('a missed throw clears the shovel target instead of selecting an older plac
   assert.equal(g.liteUseTool('shovel'),false);
 });
 
+test('abandoning a piece keeps the drop budget, including the final remaining throw', () => {
+  for(const endless of [false,true])for(const finalThrow of [false,true]){
+    const g=make();g.endless=endless;
+    if(finalThrow)g.dropsUsed=g.dropLimit-1;
+    const used=g.dropsUsed,remaining=g.dropsRemaining,lives=g.lives,board=JSON.stringify(g.board);
+    g.active.x=8;g.drop();settle(g);
+    assert.ok(g.events.some(e=>e.kind==='miss'));
+    assert.equal(g.dropsUsed,used);assert.equal(g.dropsRemaining,remaining);
+    assert.equal(g.lives,lives-1);assert.equal(JSON.stringify(g.board),board);
+    assert.equal(g.phase,'play');assert.ok(g.active);
+    g.active={type:'L',color:'L',shape:[[0,0]],x:0,y:1,origin:'ordinary'};
+    g.lock();assert.equal(g.dropsUsed,used+1);
+  }
+  const g=make();g.lives=1;g.active.x=8;g.drop();
+  assert.equal(g.phase,'lost');assert.equal(g.dropsUsed,0);
+});
+
 test('special properties survive original lock and bonus scores without old material effects', () => {
   const g = make();
   g.active = { type: 'L', color: 'L', shape: [[0, 0]], x: 0, y: 1, origin: 'ordinary', liteEffect: 'bonus' };
@@ -225,7 +242,7 @@ test('all five small levels award dice before victory', () => {
   for (let stage = 0; stage < 5; stage++) {
     assert.equal(g.stage, stage);
     finishObjective(g);
-    scripted(g, [0, 0, 0]);
+    scripted(g, [0, 0, .125]);
     assert.ok(g.liteRoll());
     assert.equal(g.liteEnterReward(),true);
     assert.equal(g.liteNext(), true);
@@ -238,7 +255,7 @@ test('shop respects phase and balance; retry resets run inventory', () => {
   const g = make();
   assert.equal(g.liteBuyOffer(g.lite.roll?.shopOffers?.find(o=>o.kind==='tool')?.slot), false);
   finishObjective(g);
-  scripted(g, [0, 0, 0]);
+  scripted(g, [0, 0, .125]);
   g.liteRoll();
   assert.equal(g.liteBuyOffer(g.lite.roll?.shopOffers?.find(o=>o.kind==='tool')?.slot), false);
   g.liteEnterReward();
@@ -407,7 +424,7 @@ test('choice timers and refresh quotas survive serialization; full Buff ownershi
   assert.equal(g.lite.roll.buffOptions.length,3);g.liteRefreshReward();g.liteStartRewardAd(1000);
   const h=make();h.phase=g.phase;h.lite=JSON.parse(JSON.stringify(g.lite));assert.equal(h.liteFinishRewardAd(2999),false);assert.equal(h.liteFinishRewardAd(3000),true);
   assert.equal(h.lite.roll.freeRefreshes,0);assert.equal(h.lite.roll.adRefreshes,2);
-  assert.equal(h.liteChooseBuff(h.lite.roll.buffOptions[0]),true);assert.equal(h.lite.buffs.length,4);assert.equal(h.lite.coins,10);
+  assert.equal(h.liteChooseBuff(h.lite.roll.buffOptions[0]),true);assert.equal(h.lite.buffs.length,4);assert.equal(h.lite.coins,25);
 });
 
 test('material conversion preserves shape and position, rejects locked phases and equal material, and survives actual lock', () => {
@@ -485,9 +502,31 @@ test('one dice refresh works before or after rolling, persists, never grants, an
 const extraReward=(route,stage=0,endless=false)=>{
   const g=make();g.stage=stage;g.endless=endless;g.phase='checkpoint-complete';g.outline=null;
   g.lite.routeChoices=[route,...originalRoutes.filter(id=>id!==route).slice(0,3)];g.lite.diceSides=[8,8,8];
-  g.liteRandom=()=>0;g.liteRoll();assert.equal(g.lite.roll.route,route);return g;
+  let draw=0;g.liteRandom=()=>draw++===2?.125:0;g.liteRoll();assert.equal(g.lite.roll.route,route);return g;
 };
 const restoreReward=g=>Object.assign(make(),{phase:g.phase,stage:g.stage,endless:g.endless,score:g.score,lite:JSON.parse(JSON.stringify(g.lite))});
+
+test('dice combinations recognize mixed types, unordered straights and triples without changing destinations',()=>{
+  for(const [sides,values,kind,coins] of [
+    [[4,6,12],[3,3,3],'triple',15],[[12,12,12],[12,12,12],'triple',15],
+    [[4,6,8],[3,1,2],'straight',8],[[12,12,12],[12,10,11],'straight',8],
+    [[4,6,8],[2,2,3],null,0],[[12,12,12],[12,1,2],null,0]]){
+    const g=make();g.phase='checkpoint-complete';g.lite.routeChoices=originalRoutes;g.lite.diceSides=sides;
+    let n=0;g.liteRandom=()=>n<3?(values[n]-1)/sides[n++]:0;
+    const r=g.liteRoll();assert.equal(r.combo?.id??null,kind);assert.equal(g.lite.coins,0);
+    assert.equal(r.route,g.liteRewardRanges().find(range=>r.total>=range.min&&r.total<=range.max).id);
+    const loaded=restoreReward(g);assert.equal(loaded.liteEnterReward(),true);assert.equal(loaded.lite.coins,5+coins);
+    assert.equal(loaded.liteEnterReward(),false);assert.equal(loaded.lite.coins,5+coins);
+    if(kind)assert.equal(loaded.lite.roll.combo.claimed,true);
+  }
+});
+
+test('refresh replaces unclaimed combination bonuses and old rolls receive no retroactive grant',()=>{
+  const g=make();g.phase='checkpoint-complete';scripted(g,[0,0,0]);g.liteRoll();assert.equal(g.lite.roll.combo.id,'triple');
+  assert.equal(g.liteRefreshDice(),true);assert.equal(g.lite.roll,null);assert.equal(g.lite.coins,0);
+  scripted(g,[0,0,.125]);g.liteRoll();assert.equal(g.lite.roll.combo,null);g.liteEnterReward();assert.equal(g.lite.coins,5);
+  const old=extraReward('shop');delete old.lite.roll.combo;const loaded=restoreReward(old);loaded.liteEnterReward();assert.equal(loaded.lite.coins,5);
+});
 
 test('each checkpoint saves four distinct destinations; refreshing dice keeps them and final normal stage excludes rest',()=>{
   const seen=new Set();
@@ -553,7 +592,7 @@ test('rest saves its random buff, substitutes coins when all buffs are owned, an
   const g=extraReward('rest'),chosen=g.lite.roll.rest.buff;g.liteEnterReward();const h=restoreReward(g);
   h.liteRandom=()=>{throw new Error('Claim must not reroll');};assert.equal(h.liteRest(),true);assert.equal(h.lite.buffs[0],chosen);assert.equal(h.lite.coins,10);assert.equal(h.liteRest(),false);
   const full=make();full.lite.buffs=['extra-moves','shovel-supply','clear-score','bonus-score'];full.phase='checkpoint-complete';full.lite.routeChoices=['rest','shop','tool','buff'];full.lite.diceSides=[8,8,8];full.liteRandom=()=>0;
-  full.liteRoll();assert.equal(full.lite.roll.rest.buff,null);assert.equal(full.lite.roll.rest.convertedCoins,5);full.liteEnterReward();assert.equal(full.liteRest(),true);assert.equal(full.lite.coins,15);assert.equal(full.lite.buffs.length,4);
+  full.liteRoll();assert.equal(full.lite.roll.rest.buff,null);assert.equal(full.lite.roll.rest.convertedCoins,5);full.liteEnterReward();assert.equal(full.liteRest(),true);assert.equal(full.lite.coins,30);assert.equal(full.lite.buffs.length,4);
 });
 
 test('rest skipping the final normal stage wins once, while endless skips use native goal generation',()=>{
