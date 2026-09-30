@@ -109,19 +109,19 @@ test('rotation miss and invalid overflow never award a tool', () => {
 });
 
 test('one sum selects Buff, entry credits once, and selection gates the next level', () => {
-  const g=make();finishObjective(g);scripted(g,[.5,.5,.5]);
+  const g=make();finishObjective(g);scripted(g,[.375,.375,.75]);
   const roll=g.liteRoll();
-  assert.equal(roll.values.join(','),'5,5,5');assert.equal(roll.total,15);assert.equal(roll.route,'buff');
+  assert.equal(roll.values.join(','),'4,4,7');assert.equal(roll.total,15);assert.equal(roll.route,'buff');
   assert.equal(g.lite.coins,0);assert.equal(g.liteChooseBuff(roll.buffOptions[0]),false);
   assert.equal(g.liteNext(),false);assert.equal(g.liteRoll(),false);
-  assert.equal(g.liteEnterReward(),true);assert.equal(g.liteEnterReward(),false);assert.equal(g.lite.coins,20);
+  assert.equal(g.liteEnterReward(),true);assert.equal(g.liteEnterReward(),false);assert.equal(g.lite.coins,5);
   assert.equal(g.liteNext(),false);assert.equal(g.liteChooseBuff('unknown'),false);
   assert.equal(g.liteChooseBuff(roll.buffOptions[0]),true);assert.equal(g.liteChooseBuff(roll.buffOptions[1]),false);
   assert.equal(g.liteNext(),true);assert.equal(g.stage,1);
 });
 
 test('pending and entered rewards serialize without rerolls or double grants', () => {
-  const g=make();finishObjective(g);scripted(g,[.4,.4,.4,0]);g.liteRoll();
+  const g=make();finishObjective(g);scripted(g,[.25,.25,.625,0]);g.liteRoll();
   const restored=Object.assign(make(),{phase:g.phase,lite:JSON.parse(JSON.stringify(g.lite))});
   assert.equal(restored.lite.roll.total,12);assert.equal(restored.lite.roll.route,'tool');
   assert.equal(restored.lite.tools.shovel,1);assert.equal(restored.liteRoll(),false);
@@ -290,7 +290,7 @@ test('all dice combinations route by total into exactly one pool, including ever
 });
 
 test('special destination grants one conversion tool; ordinary spawns stay ordinary', () => {
-  const g=make();finishObjective(g);scripted(g,[.9,.9,.9,0]);const roll=g.liteRoll();
+  const g=make();finishObjective(g);scripted(g,[.875,.875,.75,0]);const roll=g.liteRoll();
   assert.equal(roll.specialOptions.length,3);assert.equal(g.liteChooseSpecial(roll.specialOptions[0]),false);
   g.liteEnterReward();assert.equal(g.liteNext(),false);
   const id=roll.specialOptions[0];assert.equal(g.liteChooseSpecial(id),true);assert.equal(g.liteChooseSpecial(id),false);
@@ -381,7 +381,7 @@ test('repair restores one miss allowance, caps at three and cannot be used durin
 test('dice offers three distinct eligible tools; all inventory items can drop from completed rotor turns', () => {
   const ids=Object.keys(make().lite.tools);
   for(const [index,id] of ids.entries()){
-    const draw=(index+.1)/ids.length,g=make(),count=g.lite.tools[id];g.phase='checkpoint-complete';scripted(g,[.4,.4,.4,draw]);
+    const draw=(index+.1)/ids.length,g=make(),count=g.lite.tools[id];g.phase='checkpoint-complete';scripted(g,[.25,.25,.625,draw]);
     const roll=g.liteRoll();assert.equal(roll.route,'tool');assert.equal(new Set(roll.toolOptions).size,3);
     assert.ok(roll.toolOptions.every(option=>ids.includes(option)));const selected=roll.toolOptions[0],prior=g.lite.tools[selected];
     g.liteEnterReward();assert.equal(g.lite.tools[id],count);g.liteChooseTool(selected);assert.equal(g.lite.tools[selected],prior+1);
@@ -393,7 +393,7 @@ test('dice offers three distinct eligible tools; all inventory items can drop fr
 test('unused tools carry across stages and rewards stack; a new run resets inventory', () => {
   const g=make();g.lite.tools.shovel=9;g.lite.tools['block-coin']=4;g.lite.buffs=['shovel-supply'];
   const prior={...g.lite.tools};finishObjective(g);assert.deepEqual({...g.lite.tools},prior);assert.deepEqual(Array.from(g.lite.buffs),['shovel-supply']);
-  scripted(g,[.4,.4,.4,.61]);g.liteRoll();g.liteEnterReward();
+  scripted(g,[.25,.25,.625,.61]);g.liteRoll();g.liteEnterReward();
   const reward=g.lite.roll.toolOptions.find(id=>id!=='shovel');g.liteChooseTool(reward);assert.equal(g.lite.tools[reward],prior[reward]+1);
   assert.equal(g.completeCheckpoint(),false);assert.equal(g.lite.tools[reward],prior[reward]+1);
   g.liteNext();assert.equal(g.lite.tools[reward],prior[reward]+1);assert.equal(g.lite.tools.shovel,10);
@@ -403,7 +403,7 @@ test('unused tools carry across stages and rewards stack; a new run resets inven
 
 test('both choice rewards allow one free refresh and three timed ad refreshes without duplicate grants', () => {
   for(const route of ['buff','special']){
-    const g=make();g.phase='checkpoint-complete';scripted(g,route==='buff'?[.5,.5,.5]:[.9,.9,.9]);g.liteRoll();
+    const g=make();g.phase='checkpoint-complete';scripted(g,route==='buff'?[.375,.375,.75]:[.875,.875,.75]);g.liteRoll();
     const key=route==='buff'?'buffOptions':'specialOptions',choose=id=>route==='buff'?g.liteChooseBuff(id):g.liteChooseSpecial(id);
     assert.equal(g.liteRefreshReward(),false);g.liteEnterReward();
     const before=Array.from(g.lite.roll[key]);assert.equal(before.length,3);assert.equal(g.liteStartRewardAd(1000),false);
@@ -420,11 +420,11 @@ test('both choice rewards allow one free refresh and three timed ad refreshes wi
 });
 
 test('choice timers and refresh quotas survive serialization; full Buff ownership still gives three choices', () => {
-  const g=make();g.phase='checkpoint-complete';g.lite.buffs=['extra-moves','shovel-supply','clear-score','bonus-score'];scripted(g,[.5,.5,.5]);g.liteRoll();g.liteEnterReward();
+  const g=make();g.phase='checkpoint-complete';g.lite.buffs=['extra-moves','shovel-supply','clear-score','bonus-score'];scripted(g,[.375,.375,.75]);g.liteRoll();g.liteEnterReward();
   assert.equal(g.lite.roll.buffOptions.length,3);g.liteRefreshReward();g.liteStartRewardAd(1000);
   const h=make();h.phase=g.phase;h.lite=JSON.parse(JSON.stringify(g.lite));assert.equal(h.liteFinishRewardAd(2999),false);assert.equal(h.liteFinishRewardAd(3000),true);
   assert.equal(h.lite.roll.freeRefreshes,0);assert.equal(h.lite.roll.adRefreshes,2);
-  assert.equal(h.liteChooseBuff(h.lite.roll.buffOptions[0]),true);assert.equal(h.lite.buffs.length,4);assert.equal(h.lite.coins,25);
+  assert.equal(h.liteChooseBuff(h.lite.roll.buffOptions[0]),true);assert.equal(h.lite.buffs.length,4);assert.equal(h.lite.coins,10);
 });
 
 test('material conversion preserves shape and position, rejects locked phases and equal material, and survives actual lock', () => {
@@ -508,8 +508,8 @@ const restoreReward=g=>Object.assign(make(),{phase:g.phase,stage:g.stage,endless
 
 test('dice combinations recognize mixed types, unordered straights and triples without changing destinations',()=>{
   for(const [sides,values,kind,coins] of [
-    [[4,6,12],[3,3,3],'triple',15],[[12,12,12],[12,12,12],'triple',15],
-    [[4,6,8],[3,1,2],'straight',8],[[12,12,12],[12,10,11],'straight',8],
+    [[4,6,12],[3,3,3],'triple',30],[[12,12,12],[12,12,12],'maxfaces',50],
+    [[4,6,8],[3,1,2],'straight',20],[[12,12,12],[12,10,11],'straight',20],
     [[4,6,8],[2,2,3],null,0],[[12,12,12],[12,1,2],null,0]]){
     const g=make();g.phase='checkpoint-complete';g.lite.routeChoices=originalRoutes;g.lite.diceSides=sides;
     let n=0;g.liteRandom=()=>n<3?(values[n]-1)/sides[n++]:0;
@@ -522,7 +522,7 @@ test('dice combinations recognize mixed types, unordered straights and triples w
 });
 
 test('refresh replaces unclaimed combination bonuses and old rolls receive no retroactive grant',()=>{
-  const g=make();g.phase='checkpoint-complete';scripted(g,[0,0,0]);g.liteRoll();assert.equal(g.lite.roll.combo.id,'triple');
+  const g=make();g.phase='checkpoint-complete';scripted(g,[0,0,0]);g.liteRoll();assert.equal(g.lite.roll.combo.id,'ones');
   assert.equal(g.liteRefreshDice(),true);assert.equal(g.lite.roll,null);assert.equal(g.lite.coins,0);
   scripted(g,[0,0,.125]);g.liteRoll();assert.equal(g.lite.roll.combo,null);g.liteEnterReward();assert.equal(g.lite.coins,5);
   const old=extraReward('shop');delete old.lite.roll.combo;const loaded=restoreReward(old);loaded.liteEnterReward();assert.equal(loaded.lite.coins,5);
@@ -592,7 +592,7 @@ test('rest saves its random buff, substitutes coins when all buffs are owned, an
   const g=extraReward('rest'),chosen=g.lite.roll.rest.buff;g.liteEnterReward();const h=restoreReward(g);
   h.liteRandom=()=>{throw new Error('Claim must not reroll');};assert.equal(h.liteRest(),true);assert.equal(h.lite.buffs[0],chosen);assert.equal(h.lite.coins,10);assert.equal(h.liteRest(),false);
   const full=make();full.lite.buffs=['extra-moves','shovel-supply','clear-score','bonus-score'];full.phase='checkpoint-complete';full.lite.routeChoices=['rest','shop','tool','buff'];full.lite.diceSides=[8,8,8];full.liteRandom=()=>0;
-  full.liteRoll();assert.equal(full.lite.roll.rest.buff,null);assert.equal(full.lite.roll.rest.convertedCoins,5);full.liteEnterReward();assert.equal(full.liteRest(),true);assert.equal(full.lite.coins,30);assert.equal(full.lite.buffs.length,4);
+  full.liteRoll();assert.equal(full.lite.roll.rest.buff,null);assert.equal(full.lite.roll.rest.convertedCoins,5);full.liteEnterReward();assert.equal(full.liteRest(),true);assert.equal(full.lite.coins,65);assert.equal(full.lite.buffs.length,4);
 });
 
 test('rest skipping the final normal stage wins once, while endless skips use native goal generation',()=>{
@@ -615,4 +615,116 @@ test('jackpot lets players choose three distinct catalogue rewards atomically an
   const saved=restoreReward(h);assert.equal(saved.liteClaimJackpot(keys),false);assert.equal(saved.liteNext(),true);assert.equal(saved.lite.tools['block-bonus'],1);
   const owned=extraReward('jackpot');owned.liteEnterReward();owned.lite.buffs.push('clear-score');assert.equal(owned.liteClaimJackpot(keys),false);assert.equal(owned.lite.coins,5);assert.equal(owned.lite.tools['block-bonus'],0);
   const full=make();full.lite.buffs=['extra-moves','shovel-supply','clear-score','bonus-score'];full.phase='checkpoint-complete';full.lite.routeChoices=['jackpot','shop','tool','buff'];full.lite.diceSides=[8,8,8];full.liteRandom=()=>0;full.liteRoll();assert.equal(full.lite.roll.jackpotOptions.length,11);full.liteEnterReward();assert.equal(full.liteClaimJackpot(['tool:shovel','tool:swap','tool:repair']),true);
+});
+
+
+const comboReward=(values,sides=[8,8,8],route='shop',owned=[])=>{
+  const g=make();g.phase='checkpoint-complete';g.lite.buffs=[...owned];g.lite.diceSides=sides;
+  const originalRange=g.liteRewardRanges(sides).findIndex(range=>values.reduce((a,b)=>a+b,0)>=range.min&&values.reduce((a,b)=>a+b,0)<=range.max);
+  const routes=[route,...originalRoutes.filter(id=>id!==route).slice(0,3)];[routes[0],routes[originalRange]]=[routes[originalRange],routes[0]];g.lite.routeChoices=routes;
+  let n=0;g.liteRandom=()=>n<3?(values[n]-1)/sides[n++]:.3;g.liteRoll();assert.equal(g.lite.roll.route,route);return g;
+};
+const inventory=g=>JSON.stringify({coins:g.lite.coins,tools:g.lite.tools,buffs:g.lite.buffs});
+
+test('hidden combos use one highest match, mixed maxima follow individual sides, and progressions never wrap',()=>{
+  for(const [sides,values,id,coins,tools,buffs,choice] of [
+    [[8,8,12],[7,7,7],'lucky777',77,3,1,3],
+    [[4,6,8],[4,6,8],'maxfaces',50,2,1,1],
+    [[12,4,6],[12,4,6],'maxfaces',50,2,1,1],
+    [[4,6,8],[1,1,1],'ones',40,2,1,0],
+    [[4,6,12],[2,2,2],'triple',30,2,1,0],
+    [[4,6,8],[3,1,2],'straight',20,1,0,0],
+    [[8,12,6],[5,1,3],'progression',25,1,1,0],
+    [[12,8,12],[10,2,6],'progression',25,1,1,0],
+    [[12,8,12],[12,1,2],null,0,0,0,0],
+    [[4,6,8],[4,4,6],null,0,0,0,0]
+  ]){
+    const g=comboReward(values,sides),c=g.lite.roll.combo;
+    assert.equal(c?.id??null,id);if(!c)continue;
+    assert.equal(c.coins,coins);assert.equal(c.toolIds.length,tools);assert.equal(new Set(c.toolIds).size,tools);
+    assert.equal(c.buffIds.length,buffs);assert.equal(c.choiceCount,choice);assert.equal(c.choiceSettled,choice===0);
+    assert.equal(c.hidden,['lucky777','maxfaces','ones','progression'].includes(id));
+  }
+});
+
+test('mixed combo packages save exact draws, pay tools and Buff once, and retain old saved coin bonuses',()=>{
+  const g=comboReward([3,3,3]),c=g.lite.roll.combo,initial={...g.lite.tools};
+  assert.equal(g.lite.coins,0);assert.equal(g.lite.buffs.length,0);assert.equal(c.claimed,false);
+  const h=restoreReward(g);h.liteRandom=()=>{throw new Error('No new award draws at entry');};
+  assert.equal(h.liteEnterReward(),true);assert.equal(h.lite.coins,35);
+  for(const id of c.toolIds)assert.equal(h.lite.tools[id],initial[id]+1);
+  assert.deepEqual(Array.from(h.lite.buffs),Array.from(c.buffIds));
+  assert.equal(h.events.filter(e=>e.kind==='lite-extra-tool').length,2);assert.equal(h.events.filter(e=>e.kind==='lite-buff').length,1);
+  const claimed=restoreReward(h),receipt=inventory(claimed);assert.equal(claimed.liteEnterReward(),false);assert.equal(inventory(claimed),receipt);
+  for(const coins of [8,15])for(const alreadyClaimed of [false,true]){
+    const old=extraReward('shop');old.lite.roll.combo={id:'triple',name:'old',coins,description:'legacy',claimed:alreadyClaimed};
+    const saved=restoreReward(old),before=inventory(saved);saved.liteEnterReward();
+    assert.equal(saved.lite.coins,5+(alreadyClaimed?0:coins));assert.equal(saved.lite.buffs.length,0);assert.equal(saved.lite.tools.shovel,1);
+    assert.equal(saved.liteComboNeedsChoice(),false);assert.equal(saved.lite.roll.combo.description,'legacy');
+  }
+});
+
+test('full Buff ownership substitutes ten coins and choice catalogue still contains all consumables',()=>{
+  const owned=Array.from(context.ROTATION_LITE.buffs,b=>b.id),g=comboReward([7,7,7],[8,8,8],'shop',owned),c=g.lite.roll.combo;
+  assert.equal(c.buffIds.length,0);assert.equal(c.convertedCoins,10);assert.equal(c.choiceOptions.length,11);
+  assert.equal(c.choiceOptions.filter(o=>o.kind==='tool').length,10);assert.equal(c.choiceOptions.find(o=>o.key==='coin').amount,20);
+  assert.ok(c.description.includes('87'));assert.ok(c.description.includes('3'));
+  g.liteEnterReward();assert.equal(g.lite.coins,92);assert.equal(g.lite.buffs.length,4);
+  assert.equal(g.liteClaimCombo(['coin','tool:shovel','tool:block-coin']),true);assert.equal(g.lite.coins,112);
+});
+
+test('legendary choices are exact, atomic, persisted, and complete once before continuing',()=>{
+  const g=comboReward([7,7,7]),c=g.lite.roll.combo;
+  assert.equal(c.choiceOptions.length,14);assert.ok(c.choiceOptions.every(o=>o.kind!=='buff'||!c.buffIds.includes(o.item)));
+  assert.equal(g.liteComboNeedsChoice(),false);assert.equal(g.liteClaimCombo(['coin','tool:shovel','tool:swap']),false);
+  g.liteEnterReward();assert.equal(g.liteComboNeedsChoice(),true);assert.equal(g.liteNext(),false);
+  const before=inventory(g);
+  for(const invalid of [null,[],['coin'],['coin','coin','tool:shovel'],['coin','tool:shovel','unknown'],['coin','tool:shovel','tool:swap','tool:repair']])assert.equal(g.liteClaimCombo(invalid),false);
+  assert.equal(inventory(g),before);
+  const h=restoreReward(g),buff=h.lite.roll.combo.choiceOptions.find(o=>o.kind==='buff').key,keys=['coin','tool:repair',buff],repair=h.lite.tools.repair;
+  assert.equal(h.liteComboNeedsChoice(),true);h.liteRandom=()=>{throw new Error('Choice must use saved options');};
+  assert.equal(h.liteClaimCombo(keys),true);assert.equal(h.lite.coins,102);assert.equal(h.lite.tools.repair,repair+1);assert.equal(h.lite.buffs.length,2);
+  assert.equal(h.liteComboNeedsChoice(),false);assert.deepEqual(Array.from(h.lite.roll.combo.choiceKeys),keys);
+  const saved=restoreReward(h),receipt=inventory(saved);assert.equal(saved.liteClaimCombo(keys),false);assert.equal(saved.liteEnterReward(),false);assert.equal(inventory(saved),receipt);assert.equal(saved.liteNext(),true);
+  const one=comboReward([4,6,8],[4,6,8]);one.liteEnterReward();assert.equal(one.liteClaimCombo(['coin','tool:shovel']),false);assert.equal(one.liteClaimCombo(['coin']),true);
+});
+
+test('pending combo selection blocks every destination action including refresh and purchases',()=>{
+  for(const route of ['shop','tool','buff','special','exchange','gamble','rest','jackpot']){
+    const g=comboReward([7,7,7],[8,8,8],route);g.liteEnterReward();const r=g.lite.roll;
+    const before=JSON.stringify(g.lite);
+    assert.equal(g.liteChooseTool(r.toolOptions[0]),false);assert.equal(g.liteChooseBuff(r.buffOptions[0]),false);assert.equal(g.liteChooseSpecial(r.specialOptions[0]),false);
+    assert.equal(g.liteExchange('shovel',r.exchangeOptions[0]),false);assert.equal(g.liteSkipExchange(),false);
+    assert.equal(g.liteGamble(),false);assert.equal(g.liteCollectGamble(),false);assert.equal(g.liteRest(),false);
+    assert.equal(g.liteClaimJackpot(['coin','tool:shovel','tool:swap']),false);assert.equal(g.liteBuyOffer(r.shopOffers[0]?.slot),false);
+    assert.equal(g.liteCanRefreshReward(),false);assert.equal(g.liteRefreshReward(),false);assert.equal(g.liteStartRewardAd(1),false);assert.equal(g.liteFinishRewardAd(9999),false);assert.equal(g.liteNext(),false);
+    assert.equal(JSON.stringify(g.lite),before);assert.equal(g.liteClaimCombo(['coin','tool:shovel','tool:swap']),true);
+  }
+});
+
+test('auto and chosen combo Buffs leave underlying catalogues claimable and shop stock valid',()=>{
+  const g=comboReward([7,7,7],[8,8,8],'jackpot'),auto=g.lite.roll.combo.buffIds;
+  assert.ok(g.lite.roll.jackpotOptions.every(o=>o.kind!=='buff'||!auto.includes(o.item)));
+  g.liteEnterReward();const buff=g.lite.roll.combo.choiceOptions.find(o=>o.kind==='buff');
+  assert.equal(g.liteClaimCombo(['coin','tool:shovel',buff.key]),true);assert.ok(g.lite.roll.jackpotOptions.every(o=>o.kind!=='buff'||!g.lite.buffs.includes(o.item)));
+  assert.equal(g.liteClaimJackpot(['coin','tool:swap','tool:repair']),true);
+  const shop=comboReward([7,7,7]);shop.liteEnterReward();const option=shop.lite.roll.combo.choiceOptions.find(o=>o.kind==='buff');
+  shop.liteClaimCombo(['coin','tool:shovel',option.key]);assert.equal(shop.lite.roll.shopOffers.length,8);assert.ok(shop.lite.roll.shopOffers.every(o=>o.kind!=='buff'||!shop.lite.buffs.includes(o.item)));
+  const buffs=comboReward([3,3,3],[8,8,8],'buff');buffs.liteEnterReward();assert.ok(buffs.lite.roll.buffOptions.some(id=>!buffs.lite.buffs.includes(id)));assert.equal(buffs.liteChooseBuff(buffs.lite.roll.buffOptions.find(id=>!buffs.lite.buffs.includes(id))),true);
+});
+
+test('rest replaces a Buff taken by legendary choice and saves either the replacement or full-collection coins',()=>{
+  for(const fullAfterChoice of [false,true]){
+    const owned=fullAfterChoice?['clear-score','bonus-score']:[];
+    const g=comboReward([4,6,8],[4,6,8],'rest',owned);g.liteEnterReward();
+    const savedBuff=g.lite.roll.rest.buff;assert.ok(savedBuff);assert.ok(!g.lite.buffs.includes(savedBuff));
+    assert.equal(g.liteClaimCombo(['buff:'+savedBuff]),true);
+    const rest=g.lite.roll.rest;
+    if(fullAfterChoice){assert.equal(rest.buff,null);assert.equal(rest.convertedCoins,5);}
+    else {assert.ok(rest.buff);assert.notEqual(rest.buff,savedBuff);assert.ok(!g.lite.buffs.includes(rest.buff));assert.equal(rest.convertedCoins,0);}
+    const h=restoreReward(g);h.liteRandom=()=>{throw new Error('Saved rest reward must not reroll at claim');};
+    const coins=h.lite.coins,count=h.lite.buffs.length;assert.equal(h.liteRest(),true);
+    assert.equal(h.lite.coins,coins+5+(fullAfterChoice?5:0));assert.equal(h.lite.buffs.length,count+(fullAfterChoice?0:1));
+    if(rest.buff)assert.ok(h.lite.buffs.includes(rest.buff));assert.equal(h.liteRest(),false);
+  }
 });

@@ -17,7 +17,14 @@
   const RULES = Object.freeze({
     levels: 5, scoreGoals: [45, 80, 120, 180, 240], diceTypes:[4,6,8,12], diceRouteVersion:root.LITE_DICE_ROUTES.design_version,
     rewardMix:{twoNewChance:1/3,jackpotInclusionChance:0.08},
-    diceCombos:[{id:'triple',name:'豹子',coins:15},{id:'straight',name:'顺子',coins:8}],
+    diceCombos:[
+      {id:'lucky777',name:'幸运777',coins:77,toolCount:3,buffCount:1,choiceCount:3,tier:'legendary',hidden:true},
+      {id:'maxfaces',name:'满面全开',coins:50,toolCount:2,buffCount:1,choiceCount:1,tier:'legendary',hidden:true},
+      {id:'ones',name:'三元归一',coins:40,toolCount:2,buffCount:1,choiceCount:0,tier:'epic',hidden:true},
+      {id:'triple',name:'豹子',coins:30,toolCount:2,buffCount:1,choiceCount:0,tier:'epic',hidden:false},
+      {id:'straight',name:'顺子',coins:20,toolCount:1,buffCount:0,choiceCount:0,tier:'rare',hidden:false},
+      {id:'progression',name:'黄金阶梯',coins:25,toolCount:1,buffCount:1,choiceCount:0,tier:'epic',hidden:true}
+    ],
     dropLimit: 24, rotorDropChance: 0.06,
     coinReward: 5, clearCoins: 5, toolPrice: 5, shopSlots: 8, bonusPerCell: 5, buffs: BUFFS,
     tools: [
@@ -46,6 +53,40 @@
     const emptyTools = () => Object.fromEntries(RULES.tools.map(tool => [tool.id, 0]));
     const hasBuff = (game, id) => game.lite?.buffs.includes(id);
     const rewardPhase = game => game.phase === 'checkpoint-complete';
+    const rewardCatalogue = (game, coins, excludedBuffs=[]) => [
+      {key:'coin',kind:'coin',item:null,amount:coins},
+      ...RULES.tools.map(tool=>({key:'tool:'+tool.id,kind:'tool',item:tool.id,amount:1})),
+      ...BUFFS.filter(buff=>!game.lite.buffs.includes(buff.id)&&!excludedBuffs.includes(buff.id)).map(buff=>({key:'buff:'+buff.id,kind:'buff',item:buff.id,amount:1}))
+    ];
+    const grantOption = (game, option) => {
+      if(option.kind==='coin')game.lite.coins+=option.amount;
+      else if(option.kind==='tool'){
+        game.lite.tools[option.item]=(game.lite.tools[option.item]||0)+option.amount;
+        game.events.push({kind:'lite-extra-tool',id:option.item});
+      }else if(option.kind==='buff'){
+        game.lite.buffs.push(option.item);game.events.push({kind:'lite-buff',id:option.item});
+      }
+    };
+    // Combo Buffs can make a saved destination offer stale before it is displayed.
+    const reconcileRewardBuffs = game => {
+      const r=game.lite.roll;if(!r)return;
+      if(r.route==='jackpot')r.jackpotOptions=r.jackpotOptions.filter(option=>option.kind!=='buff'||!game.lite.buffs.includes(option.item));
+      if(r.route==='buff')for(let i=0;i<r.buffOptions.length;i++){
+        if(!game.lite.buffs.includes(r.buffOptions[i]))continue;
+        const replacement=BUFFS.find(buff=>!game.lite.buffs.includes(buff.id)&&!r.buffOptions.includes(buff.id));
+        if(replacement)r.buffOptions[i]=replacement.id;
+      }
+      if(r.route==='shop')for(const offer of r.shopOffers){
+        if(offer.sold||offer.kind!=='buff'||!game.lite.buffs.includes(offer.item))continue;
+        const replacement=BUFFS.find(buff=>!game.lite.buffs.includes(buff.id)&&!r.shopOffers.some(other=>other.kind==='buff'&&other.item===buff.id));
+        offer.kind=replacement?'buff':'tool';offer.item=replacement?.id||'supply';
+      }
+      if(r.route==='rest'&&r.rest&&!r.rest.claimed&&r.rest.buff&&game.lite.buffs.includes(r.rest.buff)){
+        const eligible=BUFFS.filter(buff=>!game.lite.buffs.includes(buff.id));
+        r.rest.buff=eligible.length?eligible[Math.floor(game.liteRandom()*eligible.length)].id:null;
+        r.rest.convertedCoins=eligible.length?0:RULES.coinReward;
+      }
+    };
 
     p.liteRandom = function () {
       this.lite.seed = (Math.imul(this.lite.seed, 1664525) + 1013904223) >>> 0;
@@ -235,6 +276,7 @@
       return options;
     };
     p.liteCanRefreshReward = function () {
+      if(this.liteComboNeedsChoice())return false;
       const r=this.lite.roll;return !!(rewardPhase(this)&&r?.entered&&!r.settled&&['buff','special'].includes(r.route));
     };
     p.liteRefreshReward = function () {
@@ -280,6 +322,37 @@
       this.lite.diceRefreshes=(this.lite.diceRefreshes??1)-1;this.lite.roll=null;
       this.events.push({kind:'lite-dice-refresh'});return true;
     };
+    p.liteCreateCombo = function (sides, values) {
+      const sorted=[...values].sort((a,b)=>a-b),gap=sorted[1]-sorted[0];
+      const id=values.every(value=>value===7)?'lucky777'
+        :values.every((value,i)=>value===sides[i])?'maxfaces'
+        :values.every(value=>value===1)?'ones'
+        :sorted[0]===sorted[2]?'triple'
+        :gap===1&&sorted[2]-sorted[1]===1?'straight'
+        :gap>=2&&sorted[2]-sorted[1]===gap?'progression':null;
+      if(!id)return null;
+      const spec=RULES.diceCombos.find(combo=>combo.id===id),pool=RULES.tools.map(tool=>tool.id),toolIds=[];
+      for(let i=0;i<spec.toolCount;i++)toolIds.push(pool.splice(Math.floor(this.liteRandom()*pool.length),1)[0]);
+      const eligible=BUFFS.filter(buff=>!this.lite.buffs.includes(buff.id));
+      const buffIds=spec.buffCount&&eligible.length?[eligible[Math.floor(this.liteRandom()*eligible.length)].id]:[];
+      const convertedCoins=spec.buffCount&&!buffIds.length?10:0;
+      const details=[`金币 +${spec.coins+convertedCoins}`,`道具 ×${toolIds.length}`];
+      if(buffIds.length)details.push(`Buff ×${buffIds.length}`);
+      if(spec.choiceCount)details.push(`自选奖励 ×${spec.choiceCount}`);
+      return {id:spec.id,name:spec.name,tier:spec.tier,hidden:spec.hidden,coins:spec.coins,toolIds,buffIds,convertedCoins,description:details.join(' · '),claimed:false,choiceCount:spec.choiceCount,choiceOptions:spec.choiceCount?rewardCatalogue(this,20,buffIds):[],choiceKeys:null,choiceSettled:spec.choiceCount===0};
+    };
+    p.liteComboNeedsChoice = function () {
+      const r=this.lite.roll,c=r?.combo;
+      return !!(rewardPhase(this)&&r?.entered&&c?.choiceCount>0&&!c.choiceSettled);
+    };
+    p.liteClaimCombo = function (keys) {
+      const c=this.lite.roll?.combo;
+      if(!this.liteComboNeedsChoice()||!c.claimed||!Array.isArray(keys)||keys.length!==c.choiceCount||new Set(keys).size!==keys.length)return false;
+      const choices=keys.map(key=>c.choiceOptions?.find(option=>option.key===key));
+      if(choices.some(option=>!option||option.kind==='buff'&&this.lite.buffs.includes(option.item)))return false;
+      for(const option of choices)grantOption(this,option);
+      c.choiceKeys=[...keys];c.choiceSettled=true;reconcileRewardBuffs(this);return true;
+    };
     p.liteRoll = function () {
       if (!rewardPhase(this) || this.lite.roll) return false;
       const routes=[...this.litePrepareRoutes()];
@@ -287,10 +360,7 @@
       const sides=[...this.litePrepareDice()];
       const values = sides.map(sides => 1 + Math.floor(this.liteRandom() * sides));
       const total = values.reduce((sum, value) => sum + value, 0);
-      const sorted=[...values].sort((a,b)=>a-b);
-      const comboId=sorted[0]===sorted[2]?'triple':sorted[1]===sorted[0]+1&&sorted[2]===sorted[1]+1?'straight':null;
-      const combo=comboId?{...RULES.diceCombos.find(c=>c.id===comboId),claimed:false}:null;
-      if(combo)combo.description=`金币 +${combo.coins}`;
+      const combo=this.liteCreateCombo(sides,values);
       const route = this.liteRewardRanges(sides).find(r => total >= r.min && total <= r.max).id;
       const buffOptions = route === 'buff' ? this.liteRewardOptions('buff') : [];
       let coins = RULES.clearCoins;
@@ -300,9 +370,9 @@
       const shopOffers = route === 'shop' ? this.liteCreateShop() : [];
       const exchangeOptions=route==='exchange'?this.liteRewardOptions('tool'):[];
       const gamble=route==='gamble'?{pot:5,attempts:0,maxAttempts:2,lastDie:null,lost:false,collected:0}:null;
-      const jackpotOptions=route==='jackpot'?[{key:'coin',kind:'coin',item:null,amount:RULES.coinReward},...RULES.tools.map(tool=>({key:'tool:'+tool.id,kind:'tool',item:tool.id,amount:1})),...BUFFS.filter(buff=>!this.lite.buffs.includes(buff.id)).map(buff=>({key:'buff:'+buff.id,kind:'buff',item:buff.id,amount:1}))]:[];
+      const jackpotOptions=route==='jackpot'?rewardCatalogue(this,RULES.coinReward,combo?.buffIds):[];
       const nextStage=this.stage+1,preview={...this,stage:nextStage,outline:null};
-      const restBuffs=route==='rest'?BUFFS.filter(buff=>!this.lite.buffs.includes(buff.id)):[];
+      const restBuffs=route==='rest'?BUFFS.filter(buff=>!this.lite.buffs.includes(buff.id)&&!combo?.buffIds?.includes(buff.id)):[];
       const rest=route==='rest'?{stage:nextStage,score:RULES.scoreGoals[nextStage]??originalTarget.call(preview).goals[0],coins:RULES.clearCoins,buff:restBuffs.length?restBuffs[Math.floor(this.liteRandom()*restBuffs.length)].id:null,convertedCoins:restBuffs.length?0:RULES.coinReward,claimed:false}:null;
       this.lite.roll = { sides, values, total, combo, route, routes, entered: false, coins, tools, toolOptions, chosenTool:null, specialKind:null, specialOptions,buffOptions, shopOffers, exchangeOptions,chosenExchange:null,gamble,rest,jackpotOptions,jackpotChosen:null,chosenBuff: null, settled: route==='shop',freeRefreshes:1,adRefreshes:3,adReadyAt:null };
       this.events.push({ kind: 'lite-reward', reward: structuredClone(this.lite.roll) });
@@ -313,13 +383,19 @@
       if (!rewardPhase(this) || !roll || roll.entered) return false;
       roll.entered = true;
       this.lite.coins += roll.coins;
-      if(roll.combo&&!roll.combo.claimed){this.lite.coins+=roll.combo.coins;roll.combo.claimed=true;}
+      if(roll.combo&&!roll.combo.claimed){
+        const c=roll.combo;this.lite.coins+=c.coins+(c.convertedCoins||0);
+        for(const id of c.toolIds||[])grantOption(this,{kind:'tool',item:id,amount:1});
+        for(const id of c.buffIds||[])if(!this.lite.buffs.includes(id))grantOption(this,{kind:'buff',item:id,amount:1});
+        c.claimed=true;reconcileRewardBuffs(this);
+      }
       for (const { id } of RULES.tools) this.lite.tools[id] = (this.lite.tools[id] || 0) + (roll.tools[id] || 0);
       this.lite.specials ||= [];
       this.events.push({ kind: 'lite-reward-enter', route: roll.route });
       return true;
     };
     p.liteChooseTool = function (id) {
+      if(this.liteComboNeedsChoice())return false;
       const r=this.lite.roll;
       if(!rewardPhase(this)||!r?.entered||r.route!=='tool'||r.settled||!r.toolOptions?.includes(id))return false;
       this.lite.tools[id]=(this.lite.tools[id]||0)+1;
@@ -327,6 +403,7 @@
       this.events.push({kind:'lite-tool-choice',id});return true;
     };
     p.liteChooseBuff = function (id) {
+      if(this.liteComboNeedsChoice())return false;
       const roll = this.lite.roll;
       if (!rewardPhase(this) || !roll?.entered || roll.route !== 'buff' || roll.settled || roll.adReadyAt || !roll.buffOptions.includes(id)) return false;
       if(this.lite.buffs.includes(id)){this.lite.coins+=RULES.coinReward;roll.convertedCoins=RULES.coinReward;}else this.lite.buffs.push(id);
@@ -336,11 +413,13 @@
       return true;
     };
     p.liteChooseSpecial = function (id) {
+      if(this.liteComboNeedsChoice())return false;
       const r=this.lite.roll;if(!rewardPhase(this)||!r?.entered||r.route!=='special'||r.settled||r.adReadyAt||!r.specialOptions?.includes(id))return false;
       this.lite.tools['block-'+id]=(this.lite.tools['block-'+id]||0)+1;
       r.specialKind=id;r.settled=true;this.events.push({kind:'lite-special',id});return true;
     };
     p.liteExchange = function (giveId,receiveId) {
+      if(this.liteComboNeedsChoice())return false;
       const r=this.lite.roll;
       if(!rewardPhase(this)||!r?.entered||r.route!=='exchange'||r.settled||giveId===receiveId||!RULES.tools.some(tool=>tool.id===giveId)||!(this.lite.tools[giveId]>0)||!r.exchangeOptions?.includes(receiveId))return false;
       this.lite.tools[giveId]--;this.lite.tools[receiveId]=(this.lite.tools[receiveId]||0)+1;
@@ -348,10 +427,12 @@
       this.events.push({kind:'lite-extra-tool',id:receiveId});return true;
     };
     p.liteSkipExchange = function () {
+      if(this.liteComboNeedsChoice())return false;
       const r=this.lite.roll;if(!rewardPhase(this)||!r?.entered||r.route!=='exchange'||r.settled)return false;
       r.exchangeSkipped=true;r.settled=true;return true;
     };
     p.liteGamble = function () {
+      if(this.liteComboNeedsChoice())return false;
       const r=this.lite.roll,g=r?.gamble;
       if(!rewardPhase(this)||!r?.entered||r.route!=='gamble'||r.settled||!g||g.lost||g.attempts>=g.maxAttempts)return false;
       g.lastDie=1+Math.floor(this.liteRandom()*6);g.attempts++;
@@ -359,12 +440,14 @@
       this.events.push({kind:'lite-gamble',die:g.lastDie,pot:g.pot,lost:g.lost});return true;
     };
     p.liteCollectGamble = function () {
+      if(this.liteComboNeedsChoice())return false;
       const r=this.lite.roll,g=r?.gamble;
       if(!rewardPhase(this)||!r?.entered||r.route!=='gamble'||r.settled||!g)return false;
       g.collected=g.pot;this.lite.coins+=g.collected;r.settled=true;
       this.events.push({kind:'lite-gamble-collect',coins:g.collected});return true;
     };
     p.liteRest = function () {
+      if(this.liteComboNeedsChoice())return false;
       const r=this.lite.roll;
       if(!rewardPhase(this)||!r?.entered||r.route!=='rest'||r.settled||!r.rest||r.rest.claimed||(!this.endless&&this.stage>=RULES.levels-1))return false;
       this.score+=r.rest.score;
@@ -374,6 +457,7 @@
       this.events.push({kind:'lite-rest',stage:r.rest.stage,score:r.rest.score});return true;
     };
     p.liteClaimJackpot = function (keys) {
+      if(this.liteComboNeedsChoice())return false;
       const r=this.lite.roll;
       if(!rewardPhase(this)||!r?.entered||r.route!=='jackpot'||r.settled||!Array.isArray(keys)||keys.length!==3||new Set(keys).size!==3)return false;
       const choices=keys.map(key=>r.jackpotOptions?.find(option=>option.key===key));
@@ -419,6 +503,7 @@
       return offers;
     };
     p.liteBuyOffer = function (slot) {
+      if(this.liteComboNeedsChoice())return false;
       const roll = this.lite.roll;
       if (!rewardPhase(this) || !roll?.entered || roll.route !== 'shop') return false;
       const offer = roll.shopOffers?.find(item => item.slot === slot);
@@ -433,6 +518,7 @@
       return true;
     };
     p.liteNext = function () {
+      if(this.liteComboNeedsChoice())return false;
       if (!rewardPhase(this) || !this.lite.roll?.entered || !this.lite.roll.settled) return false;
       const next=this.liteNextStageInfo();
       if (next.won) {

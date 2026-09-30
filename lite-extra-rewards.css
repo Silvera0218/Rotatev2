@@ -54,3 +54,9 @@ html.arcade-ui[data-lite] #stage #overlay[data-lite-reward=true] #lite-extra-rew
 html.arcade-ui[data-lite] #stage #overlay[data-lite-reward=true] #lite-extra-reward .lite-extra-catalog-item[aria-pressed=true]{border-color:#9bce16!important;background-color:#d9f7af!important}
 html.arcade-ui[data-lite] #stage #overlay[data-lite-reward=true] #lite-extra-reward .lite-jackpot-tabs button{height:auto!important;min-height:40px!important;min-width:0!important;padding:5px 0!important;border:0!important;border-radius:20px!important;background:transparent!important;box-shadow:none!important}
 html.arcade-ui[data-lite] #stage #overlay[data-lite-reward=true] #lite-extra-reward .lite-jackpot-tabs button[aria-pressed=true]{background:#c4ff17!important;box-shadow:inset 0 -2px #8ccc30!important}
+
+/* Rare-combination choices share the shop catalogue and its fixed controls. */
+html[data-lite] .lite-combo-choice-screen > :not(.lite-extra-catalog){flex-shrink:0}
+html.arcade-ui[data-lite] #stage #overlay[data-lite-reward=true] .lite-combo-earned{padding:8px 10px;border-left:4px solid #c4ff17;background:#eefaff;text-align:left;font-size:12px;line-height:1.55}
+html[data-lite] .lite-combo-earned strong{color:#294a7b}
+@media(max-height:700px){html[data-lite] .lite-combo-choice-screen{gap:6px}html.arcade-ui[data-lite] #stage #overlay[data-lite-reward=true] .lite-combo-choice-screen > p{font-size:12px;line-height:1.45}}

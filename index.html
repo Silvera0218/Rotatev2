@@ -9762,6 +9762,7 @@ function liteCreateReward(){
   liteRewardPanel.innerHTML='<h2 class="lite-reward-title" id="lite-reward-title">投出下一站</h2><div id="lite-dice-stage"></div><p id="lite-dice-total" role="status"></p><p id="lite-reward-summary" role="status"></p><div id="lite-route-ranges"></div><div id="lite-reward-item" hidden></div><div id="lite-buff-choices"></div><button id="lite-roll" class="popup-primary" type="button">投掷</button><button id="lite-enter" class="popup-primary" type="button" hidden>进入奖励</button><div id="lite-shop" hidden><p>关间商店 <span id="lite-shop-wallet"></span></p><div id="lite-shop-offers"></div></div><button id="lite-next" class="popup-primary" type="button" hidden>下一关 →</button>';
   I('overlay').querySelector('.dialog').append(liteRewardPanel);liteDice=createLiteDice(I('lite-dice-stage'));
   const extra=document.createElement('section');extra.id='lite-extra-reward';extra.hidden=true;I('lite-next').before(extra);
+  const comboLoot=document.createElement('details');comboLoot.id='lite-combo-loot';comboLoot.hidden=true;I('lite-reward-summary').after(comboLoot);
   const diceRefresh=document.createElement('button');diceRefresh.id='lite-refresh-dice';diceRefresh.type='button';diceRefresh.textContent='换一组骰子 · 免费 1 次';I('lite-dice-stage').after(diceRefresh);
   diceRefresh.onclick=()=>{if(liteRolling||!L.liteRefreshDice())return;liteDice.show(liteFaces(null));se.play('turn');liteUpdateReward();d3();liteSaveSafe();I('lite-roll').focus({preventScroll:true});};
   const shopHero=document.createElement('header');shopHero.id='lite-shop-hero';shopHero.innerHTML='<div class="lite-shop-hero-inner"><img src="./assets/ui/shopkeeper.png" width="128" height="128" alt="挥手的白色圆形机器人店员"><div><span>SHOP</span><h2 id="lite-shop-title">补给商城</h2></div></div>';liteRewardPanel.before(shopHero);
@@ -9793,7 +9794,7 @@ function liteCreateReward(){
     liteLeaveReward(event.currentTarget,()=>{if(!L.liteEnterReward())return;se.play('turn');liteUpdateReward();d3();liteSaveSafe();I('lite-reward-title').setAttribute('tabindex','-1');I('lite-reward-title').focus({preventScroll:true});});
   };
   I('lite-next').onclick=event=>{
-    if(liteRolling||!L.lite.roll?.entered||!L.lite.roll.settled)return;
+    if(liteRolling||!L.lite.roll?.entered||!L.lite.roll.settled||L.liteComboNeedsChoice())return;
     const next=L.liteNextStageInfo();
     se.unlock();z6({element:event.currentTarget,event,palette:l5[next.stage%l5.length],kicker:next.won?'本局完成':`目标 ${next.goal} 分`,title:next.won?'挑战完成':`第 ${next.stage+1} 关`,swap:()=>{if(!L.liteNext())return;liteCloseReward();G0=false;y5();I('overlay').hidden=true;Gt.reset();Ie.reset();pe.reset();G3();yt=0;k0=null;H3=-1;be.round=-1;v5(0,true);d3();Qt();liteSaveSafe();}});
   };
@@ -9844,24 +9845,26 @@ function liteAnimateRouteCarousel(now){
 function liteShowDiceCombo(roll,animate=false){
   const stage=I('lite-dice-stage');stage.querySelector('.lite-dice-combo')?.remove();I('lite-dice-total').querySelector('.lite-dice-combo-reward')?.remove();
   if(!roll?.combo||roll.entered||liteRolling)return;
-  const combo=roll.combo,fx=document.createElement('div');fx.className='lite-dice-combo';fx.dataset.combo=combo.id;
+  const combo=roll.combo,fx=document.createElement('div');fx.className='lite-dice-combo';fx.dataset.combo=combo.id;fx.dataset.tier=combo.tier||'rare';
   fx.setAttribute('role','status');const title=document.createElement('strong'),reward=document.createElement('span');
   title.textContent=combo.name+'！';reward.className='lite-dice-combo-reward';reward.textContent=combo.description+' · 进入奖励页领取';fx.append(title);stage.append(fx);I('lite-dice-total').append(reward);
   if(!animate||matchMedia('(prefers-reduced-motion: reduce)').matches)return;
   fx.classList.add('is-burst');reward.classList.add('is-burst');
-  for(let i=0;i<24;i++){const pixel=document.createElement('i'),angle=i*Math.PI/12;pixel.style.setProperty('--x',Math.cos(angle)*(100+i%3*28)+'px');pixel.style.setProperty('--y',Math.sin(angle)*(65+i%3*18)+'px');pixel.style.setProperty('--delay',i%4*25+'ms');fx.append(pixel);}
+  const count=combo.tier==='legendary'?48:combo.tier==='epic'?36:24;
+  for(let i=0;i<count;i++){const pixel=document.createElement('i'),angle=i*Math.PI*2/count;pixel.style.setProperty('--x',Math.cos(angle)*(100+i%3*28)+'px');pixel.style.setProperty('--y',Math.sin(angle)*(65+i%3*18)+'px');pixel.style.setProperty('--delay',i%4*25+'ms');fx.append(pixel);}
   se.play('turn');
 }
 function liteUpdateReward(){
   const roll=L.lite.roll,entered=!!roll?.entered,route=liteConfig.rewardRoutes.find(r=>r.id===roll?.route);
-  const page=entered?roll.route:'dice';liteRewardPanel.dataset.page=page;if(I('overlay').dataset.litePage!==page)I('overlay').dataset.litePage=page;
+  const comboPending=L.liteComboNeedsChoice();
+  const page=comboPending?'combo':entered?roll.route:'dice';liteRewardPanel.dataset.page=page;if(I('overlay').dataset.litePage!==page)I('overlay').dataset.litePage=page;
   I('lite-shop-wallet').hidden=page!=='shop';
   I('overlay').querySelector('.dialog').setAttribute('aria-labelledby',page==='shop'?'lite-shop-title':'lite-reward-title');
-  I('lite-roll').hidden=!!roll;I('lite-enter').hidden=!roll||entered;I('lite-next').hidden=!entered;
-  I('lite-dice-stage').hidden=entered;I('lite-route-ranges').hidden=entered;I('lite-shop').hidden=!entered||roll.route!=='shop'||roll.legacyClaimed;
+  I('lite-roll').hidden=!!roll;I('lite-enter').hidden=!roll||entered;I('lite-next').hidden=!entered||comboPending;
+  I('lite-dice-stage').hidden=entered;I('lite-route-ranges').hidden=entered;I('lite-shop').hidden=page!=='shop'||roll?.legacyClaimed;
   const next=L.liteNextStageInfo();I('lite-next').textContent=next.won?'完成本局':roll?.route==='rest'&&roll.settled?`进入第 ${next.stage+1} 关`:'下一关';
-  I('lite-reward-title').textContent=entered?route.name:`第 ${L.stage+1} 关通过！`;
-  I('dialog-tag').textContent=entered?'幸运抵达 · '+route.name:'关卡完成 · 三骰定去向';
+  I('lite-reward-title').textContent=comboPending?roll.combo.name+' · 自选奖励':entered?route.name:`第 ${L.stage+1} 关通过！`;
+  I('dialog-tag').textContent=comboPending?'隐藏大奖 · 额外奖励':entered?'幸运抵达 · '+route.name:'关卡完成 · 三骰定去向';
   I('lite-dice-total').hidden=entered||!roll;
   I('lite-reward-summary').hidden=page==='dice';
   I('lite-dice-total').textContent=roll?`总点数 ${roll.total}`:'三颗混合骰子';
@@ -9871,10 +9874,17 @@ function liteUpdateReward(){
   liteSyncRouteCarousel(roll);
   const box=I('lite-buff-choices'),item=I('lite-reward-item');box.replaceChildren();item.replaceChildren();item.hidden=true;
   const extra=I('lite-extra-reward');extra.replaceChildren();extra.hidden=true;
+  const comboLoot=I('lite-combo-loot');comboLoot.hidden=true;comboLoot.replaceChildren();
   I('lite-choice-refresh').hidden=true;
   if(!roll){I('lite-reward-summary').textContent='区间随骰型调整 · 四类奖励机会接近';I('lite-roll').textContent='投掷';return;}
-  if(!entered){I('lite-reward-summary').textContent=`前往${route.name}`;I('lite-enter').textContent=`进入${route.name}`;return;}
-  I('lite-next').disabled=!roll.settled;
+  if(!entered){I('lite-reward-summary').textContent=`前往${route.name}`;I('lite-enter').textContent=roll.combo?.choiceCount?'领取大奖':`进入${route.name}`;return;}
+  I('lite-next').disabled=!roll.settled||comboPending;
+  if(comboPending){
+    I('lite-reward-summary').hidden=true;extra.hidden=false;
+    renderLiteComboReward(extra,{game:L,icon:liteIcon,tool:liteTool,buff:liteBuff,act(fn){
+      if(!fn())return false;se.play('clear');liteUpdateReward();liteSync();d3();liteSaveSafe();I('lite-reward-title').focus({preventScroll:true});return true;
+    }});return;
+  }
   I('lite-reward-summary').textContent=roll.legacyClaimed?(roll.settled?'本关旧版奖励已领取，下关开始按总和前往奖励地点。':'选完上次保留的 Buff，下关开始按总和前往奖励地点。'):`通关补给 · 金币 +${roll.coins}`;
   if(roll.legacyClaimed&&roll.settled)return;
   if(['exchange','gamble','rest','jackpot'].includes(roll.route)){
@@ -9932,7 +9942,13 @@ function liteUpdateReward(){
     shop.append(button);
   }
 
-  if(roll.combo?.claimed)I('lite-reward-summary').textContent+=` · ${roll.combo.name} +${roll.combo.coins} 金币`;
+  if(roll.combo?.claimed){
+    const c=roll.combo,summary=document.createElement('summary'),copy=document.createElement('div');
+    summary.textContent=c.name+'大奖已领取 · 查看奖励';
+    const items=[`${c.coins+(c.convertedCoins||0)} 金币`,...(c.toolIds||[]).map(id=>liteToolName(id)+' ×1'),...(c.buffIds||[]).map(id=>liteBuff(id)?.name||id)];
+    for(const key of c.choiceKeys||[]){const o=c.choiceOptions?.find(o=>o.key===key);if(o)items.push('自选：'+(o.kind==='coin'?o.amount+' 金币':o.kind==='buff'?liteBuff(o.item)?.name:liteToolName(o.item)));}
+    copy.textContent=items.join(' · ');comboLoot.append(summary,copy);comboLoot.hidden=false;
+  }
 }
 function liteUpdateRefresh(){
   const r=L.lite.roll;if(!r||!I('lite-refresh-reward'))return;
@@ -9968,7 +9984,7 @@ I('start').onclick=event=>{
   if(['checkpoint-complete','level-complete'].includes(L.phase)&&he)return;
   z6({mode:he?'fluid':'submerge',element:event.currentTarget,event,kicker:'旋轴填形 · 三骰补给',title:'第 1 关',palette:l5[0],swap:()=>ka(true)});
 };
-I('help').onclick=()=>{if(me.active||!he||k0||Ie.busy||L.phase!=='play')return;G0=true;_t();se.pause();Ht('转一转，填满这一圈。','填满轮廓得分，达到本关目标后过关。放弃方块落空不扣投放次数，但会消耗落空容错。无尽模式沿用原版多种轮廓，持续挑战后续关卡。\n\n特殊方块也是道具：落地前点击右侧图标，将当前块改造为对应材质，形状保持不变。未使用的道具会保留到后续关卡，通关奖励和商店购买的道具会叠加到库存。\n\n道具补给随机展示三个不同道具，选择一个用于下一关。每次从八类地点中抽取四个，老四类总体占三分之二，新四类占三分之一，大成功约 2%。置换工坊交换库存道具；幸运赌桌可收手或冒险翻倍；休息站跳过下一关并获得该关目标分数、金币和随机 Buff；大成功从奖励池自选三项。三骰同点为豹子，额外 15 金币；点数连续为顺子，额外 8 金币，顺序不限。进入奖励页时领取，换骰会替换未领取的奖励。混合骰子的奖励区间随当前骰型调整；投掷前后共用一次免费换骰，进入奖励页后不能换。方块改造、Buff 奖励也为三选一，免费刷新 1 次，之后最多广告刷新 3 次。目前每次等待 2 秒模拟广告。Buff 本局有效，已拥有的选项可转为 5 金币。\n\n商店每次 8 个随机货位，可按方块、道具、Buff 分类查找。有效转轴旋转有小概率掉落道具。\n\n方向键 / A、D：移动；R / ↑：旋转；空格：投放。','继续游戏','怎么玩');I('game-ui').inert=true;};
+I('help').onclick=()=>{if(me.active||!he||k0||Ie.busy||L.phase!=='play')return;G0=true;_t();se.pause();Ht('转一转，填满这一圈。','填满轮廓得分，达到本关目标后过关。放弃方块落空不扣投放次数，但会消耗落空容错。无尽模式沿用原版多种轮廓，持续挑战后续关卡。\n\n特殊方块也是道具：落地前点击右侧图标，将当前块改造为对应材质，形状保持不变。未使用的道具会保留到后续关卡，通关奖励和商店购买的道具会叠加到库存。\n\n道具补给随机展示三个不同道具，选择一个用于下一关。每次从八类地点中抽取四个，老四类总体占三分之二，新四类占三分之一，大成功约 2%。置换工坊交换库存道具；幸运赌桌可收手或冒险翻倍；休息站跳过下一关并获得该关目标分数、金币和随机 Buff；大成功从奖励池自选三项。三骰同点为豹子，奖励 30 金币、2 件道具和 1 个 Buff；点数连续为顺子，奖励 20 金币和 1 件道具，顺序不限。另有四种隐藏组合，命中后揭晓；稀有组合还能额外自选奖励。进入奖励页时领取，换骰会替换未领取的奖励。混合骰子的奖励区间随当前骰型调整；投掷前后共用一次免费换骰，进入奖励页后不能换。方块改造、Buff 奖励也为三选一，免费刷新 1 次，之后最多广告刷新 3 次。目前每次等待 2 秒模拟广告。Buff 本局有效，已拥有的选项可转为 5 金币。\n\n商店每次 8 个随机货位，可按方块、道具、Buff 分类查找。有效转轴旋转有小概率掉落道具。\n\n方向键 / A、D：移动；R / ↑：旋转；空格：投放。','继续游戏','怎么玩');I('game-ui').inert=true;};
 // Lightweight saves retain the existing game object, with their own namespace.
 P6=function(text){const value=JSON.parse(text,Lf),g=value?.game;if(value?.version!=='lite-1'||!g?.lite||!Array.isArray(g.board)||!['play','checkpoint-complete','lost','won'].includes(g.phase)||!Number.isInteger(g.stage)||g.stage<0||(!g.endless&&g.stage>=5))throw Error('轻量版存档无效');if(g.lite.roll&&!g.lite.roll.route){const old=g.lite.roll,total=old.values.reduce((sum,n)=>sum+n,0),pending=old.buffOptions?.length&&!old.chosenBuff;g.lite.roll={values:old.values,total,route:pending?'buff':liteConfig.rewardRoutes.find(r=>total>=r.min&&total<=r.max).id,entered:true,settled:!pending,legacyClaimed:true,coins:0,tools:{shovel:0,swap:0},buffOptions:pending?old.buffOptions:[],specialKind:null};}g.lite.tools={...Object.fromEntries(liteConfig.tools.map(t=>[t.id,0])),...g.lite.tools};g.lite.extraDrops??=0;if(!g.lite.specialToolsMigrated){for(const id of g.lite.specials||[])if(liteSpecial(id))g.lite.tools['block-'+id]=(g.lite.tools['block-'+id]||0)+1;g.lite.specialToolsMigrated=true;}g.lite.specials=[];g.lite.nextEffect=null;
 const probe=new e9(42);Object.assign(probe,g);const r=g.lite.roll;

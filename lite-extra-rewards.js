@@ -67,8 +67,13 @@
     if(roll.settled){
       receipt(screen,'大成功奖励已领取',(roll.jackpotChosen||[]).map(key=>options.find(o=>o.key===key)).filter(Boolean).map(optionName).join(' · '));return true;
     }
-    note(screen,'从全部奖励中任选 3 项。');
-    const selected=new Set(),counter=node('p','lite-extra-selection','已选 0 / 3 项'),catalog=node('div','lite-extra-catalog');
+    renderCatalogue(screen,{options,count:3,label:'大成功',icon,tool,buff,act,claimChoice:keys=>game.liteClaimJackpot(keys)});
+    return true;
+  };
+  function renderCatalogue(screen,{options,count,label,icon,tool,buff,act,claimChoice}){
+    const optionName=o=>o.kind==='coin'?o.amount+' 金币':o.kind==='buff'?(buff(o.item)?.name||o.item):(tool(o.item)?.name||o.item);
+    note(screen,`从全部奖励中任选 ${count} 项。`);
+    const selected=new Set(),counter=node('p','lite-extra-selection',`已选 0 / ${count} 项`),catalog=node('div','lite-extra-catalog');
     const categories=[['all','全部'],['coin','金币'],['tool','道具'],['special','方块'],['buff','Buff']];
     const categoryOf=o=>o.kind==='tool'&&tool(o.item)?.blockEffect?'special':o.kind;
     const tabs=node('nav','lite-jackpot-tabs');tabs.setAttribute('aria-label','奖励分类');
@@ -80,11 +85,11 @@
       empty.hidden=options.some(o=>category==='all'||categoryOf(o)===category);catalog.scrollTop=0;
     };
     for(const[id,label]of categories){const tab=button(label,()=>{category=id;filter();},true);tab.dataset.category=id;tabs.append(tab);}
-    catalog.setAttribute('aria-label','大成功奖励目录');
-    const claim=button('领取 3 项奖励',()=>act(()=>game.liteClaimJackpot([...selected])));claim.disabled=true;
-    const sync=()=>{counter.textContent=`已选 ${selected.size} / 3 项`;claim.disabled=selected.size!==3;for(const b of catalog.children){const picked=selected.has(b.dataset.reward);b.setAttribute('aria-pressed',String(picked));b.disabled=selected.size===3&&!picked;b.querySelector('.lite-jackpot-pick').textContent=picked?'已选 · 点击取消':'选择此项';}};
+    catalog.setAttribute('aria-label',label+'奖励目录');
+    const claim=button(`领取 ${count} 项奖励`,()=>act(()=>claimChoice([...selected])));claim.disabled=true;
+    const sync=()=>{counter.textContent=`已选 ${selected.size} / ${count} 项`;claim.disabled=selected.size!==count;for(const b of catalog.children){const picked=selected.has(b.dataset.reward);b.setAttribute('aria-pressed',String(picked));b.disabled=selected.size===count&&!picked;b.querySelector('.lite-jackpot-pick').textContent=picked?'已选 · 点击取消':'选择此项';}};
     for(const option of options){
-      const b=button('',()=>{if(selected.has(option.key))selected.delete(option.key);else if(selected.size<3)selected.add(option.key);sync();},true);
+      const b=button('',()=>{if(selected.has(option.key))selected.delete(option.key);else if(selected.size<count)selected.add(option.key);sync();},true);
       b.classList.add('lite-extra-catalog-item');b.dataset.reward=option.key;b.dataset.category=categoryOf(option);b.setAttribute('aria-pressed','false');
       const glyph=node('span','lite-extra-catalog-icon');
       if(option.kind==='tool')glyph.innerHTML=icon(option.item);
@@ -95,5 +100,25 @@
     }
     const footer=node('div','lite-jackpot-footer');footer.append(counter,claim);screen.append(tabs,empty,catalog,footer);filter();
     return true;
+  }
+
+  root.renderLiteComboReward=function(host,{game,icon,tool,buff,act}){
+    if(!game.liteComboNeedsChoice())return false;
+    const roll=game.lite.roll,combo=roll.combo;
+    const screen=node('section','lite-extra-screen lite-combo-choice-screen');screen.dataset.destination='jackpot';host.append(screen);
+    const granted=[];
+    if(combo.coins)granted.push(combo.coins+' 金币');
+    for(const id of combo.toolIds||[])granted.push(tool(id)?.name||id);
+    for(const id of combo.buffIds||[])granted.push(buff(id)?.name||id);
+    if(combo.convertedCoins)granted.push('Buff 折算 '+combo.convertedCoins+' 金币');
+    if(granted.length){
+      const earned=node('p','lite-combo-earned');earned.setAttribute('role','status');
+      earned.append(node('strong','','已获得：'),document.createTextNode(granted.join(' · ')));screen.append(earned);
+    }
+    const routeName=roll.routeName||game.liteRewardRanges().find(r=>r.id===roll.route)?.name||'奖励地点';
+    note(screen,'选完后继续前往'+routeName);
+    renderCatalogue(screen,{options:combo.choiceOptions||[],count:combo.choiceCount,label:combo.name,icon,tool,buff,act,claimChoice:keys=>game.liteClaimCombo(keys)});
+    return true;
   };
+
 })(globalThis);
