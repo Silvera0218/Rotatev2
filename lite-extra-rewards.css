@@ -1,0 +1,56 @@
+html[data-lite] #lite-extra-reward{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin}
+html[data-lite] #lite-extra-reward[hidden]{display:none!important}
+html[data-lite] #lite-extra-reward:has(.lite-extra-screen){display:block;width:100%;box-sizing:border-box;padding:4px 0 12px}
+html[data-lite] .lite-extra-screen{display:flex;flex-direction:column;gap:14px;width:100%;min-width:0;text-align:center;color:#294a7b}
+html[data-lite] .lite-extra-heading{display:flex;align-items:center;justify-content:center;gap:22px;min-height:82px}
+html[data-lite] #lite-extra-reward .lite-extra-emblem{width:80px;height:80px;image-rendering:pixelated}
+html.arcade-ui[data-lite] #stage #overlay[data-lite-reward=true] .lite-extra-screen p{margin:0;line-height:1.65;font-size:13px;color:#426080!important}
+html[data-lite] .lite-extra-screen h3{font-size:14px;margin:0;text-align:left;color:#3454b2}
+html[data-lite] .lite-extra-inventory{display:flex;gap:9px;overflow-x:auto;padding:3px 3px 8px;scrollbar-width:thin}
+html.arcade-ui[data-lite] #stage .lite-extra-button{font-family:inherit;box-sizing:border-box;min-height:46px;padding:10px 12px;border:2px solid #3454f7;border-radius:7px;background:#c4ff17;color:#254775;box-shadow:0 3px 0 #91b73f;font-size:14px;line-height:1.4;cursor:pointer;touch-action:manipulation}
+html.arcade-ui[data-lite] #stage .lite-extra-button.is-secondary{background:#f4fbff;box-shadow:0 3px 0 #aac9ec}
+html.arcade-ui[data-lite] #stage .lite-extra-button:disabled{opacity:.45;cursor:default}
+html.arcade-ui[data-lite] #stage .lite-extra-button:focus-visible{outline:3px solid #008bf0;outline-offset:3px}
+html.arcade-ui[data-lite] #stage .lite-extra-button:active:not(:disabled){transform:translateY(2px);box-shadow:none}
+html.arcade-ui[data-lite] #stage .lite-extra-button[aria-pressed=true]{background:#e6ff9f;border-color:#3454f7;box-shadow:0 3px 0 #7ca637}
+html.arcade-ui[data-lite] #stage .lite-extra-inventory-item{position:relative;flex:0 0 78px;display:flex;flex-direction:column;align-items:center;gap:5px;padding:8px 4px;font-size:11px}
+html[data-lite] #lite-extra-reward .lite-extra-inventory-item :is(img,svg){width:32px;height:32px;image-rendering:pixelated}
+html[data-lite] .lite-extra-count{position:absolute;top:2px;right:3px;font-size:10px;background:#3454b2;color:#fff;padding:1px 3px;border-radius:3px}
+html[data-lite] .lite-extra-offers{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px}
+html.arcade-ui[data-lite] #stage .lite-extra-offer{display:flex;flex-direction:column;align-items:center;gap:7px;padding:10px 5px;min-width:0}
+html[data-lite] #lite-extra-reward .lite-extra-offer :is(img,svg){width:40px;height:40px;image-rendering:pixelated}
+html[data-lite] #lite-extra-reward .lite-extra-offer strong{font-size:13px;line-height:1.35}
+html[data-lite] .lite-extra-offer small{font-size:11px;line-height:1.5;color:#526c89;overflow-wrap:anywhere}
+html[data-lite] .lite-extra-actions{display:grid;grid-template-columns:1fr 1.2fr;gap:10px;margin:4px 0 3px}
+html[data-lite] .lite-extra-pot{display:flex;flex-direction:column;align-items:center;gap:6px;padding:12px 0;border-top:2px solid #a1c9ea;border-bottom:2px solid #a1c9ea}
+html[data-lite] .lite-extra-pot small{font-size:13px;color:#526c89}
+html[data-lite] #lite-extra-reward .lite-extra-pot strong{font-size:30px;line-height:1.3;color:#3454f7;text-shadow:2px 2px #fff}
+html[data-lite] .lite-extra-die{display:grid;place-items:center;box-sizing:border-box;width:62px;height:62px;border:3px solid #3454f7;background:#fff;color:#3454f7;font-size:34px;box-shadow:5px 5px 0 #a1c2ff;border-radius:8px}
+html[data-lite] .lite-extra-die.is-rolling{animation:lite-extra-tumble .38s ease-in-out both}
+@keyframes lite-extra-tumble{0%{transform:translateY(0) rotate(0)}35%{transform:translateY(-16px) rotate(130deg) scale(1.08)}75%{transform:translateY(2px) rotate(300deg) scale(.95)}100%{transform:translateY(0) rotate(360deg)}}
+@media(prefers-reduced-motion:reduce){html[data-lite] .lite-extra-die.is-rolling{animation:none}}
+html[data-lite] .lite-extra-receipt{display:flex;flex-direction:column;gap:8px;padding:18px 12px;border-top:3px solid #c4ff17;background:#eefaff}
+html[data-lite] #lite-extra-reward .lite-extra-receipt strong{font-size:19px;color:#294a7b;line-height:1.45}
+html[data-lite] #lite-extra-reward:has([data-destination=jackpot]){overflow:hidden;padding-bottom:4px}
+html[data-lite] .lite-extra-screen[data-destination=jackpot]{height:100%;min-height:0;gap:10px}
+html[data-lite] .lite-extra-catalog{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;flex:1;min-height:0;overflow-y:auto;padding:3px 4px 8px;overscroll-behavior:contain;scrollbar-width:thin;align-content:start}
+html.arcade-ui[data-lite] #stage .lite-extra-catalog-item{display:grid;grid-template-rows:auto 56px 1fr 29px;align-items:center;gap:4px;padding:0;min-width:0;min-height:176px;overflow:hidden;text-align:center;border:2px solid #5077f4;border-radius:13px;background-color:#b6e5fb;background-image:radial-gradient(circle at 20% 22%,#edffffbb 0 3px,transparent 4px),repeating-conic-gradient(#d6f3ff66 0 25%,transparent 0 50%);background-size:auto,24px 24px;box-shadow:0 3px 0 #7fbbec}
+html[data-lite] #lite-extra-reward .lite-extra-catalog-item[hidden]{display:none!important}
+html[data-lite] .lite-extra-catalog-icon{display:grid;place-items:center;justify-self:center;width:52px;height:52px}
+html[data-lite] #lite-extra-reward .lite-extra-catalog-icon :is(img,svg){width:48px;height:48px;image-rendering:pixelated}
+html[data-lite] #lite-extra-reward .lite-jackpot-name{padding:8px 8px 0;font-size:14px;line-height:1.4;color:#294a7b}
+html[data-lite] .lite-jackpot-description{padding:0 8px 6px;font-size:11px;line-height:1.5;color:#426080;overflow-wrap:anywhere}
+html[data-lite] .lite-jackpot-pick{display:grid;place-items:center;align-self:stretch;border-top:2px solid #8ac5ed;background:#f4fcff;color:#294a7b;font-size:12px}
+html[data-lite] .lite-extra-catalog-item[aria-pressed=true] .lite-jackpot-pick{background:#c4ff17;border-color:#92c939}
+html[data-lite] .lite-jackpot-tabs{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:3px;flex:none;padding:3px;background:#edfaff;border:2px solid #8ab9ef;border-radius:25px}
+html.arcade-ui[data-lite] #stage .lite-jackpot-tabs .lite-extra-button{min-width:0;min-height:40px;padding:5px 0;border:0;border-radius:20px;box-shadow:none;background:transparent;font-size:12px}
+html.arcade-ui[data-lite] #stage .lite-jackpot-tabs .lite-extra-button[aria-pressed=true]{background:#c4ff17;box-shadow:inset 0 -2px #8ccc30}
+html[data-lite] .lite-jackpot-footer{display:flex;flex-direction:column;gap:7px;flex:none;padding:5px 0 3px;border-top:2px solid #a1c9ea}
+html[data-lite] .lite-jackpot-empty[hidden]{display:none!important}
+html[data-lite] .lite-extra-screen[data-destination=jackpot] .lite-extra-heading{display:none}
+@media(max-height:700px){html[data-lite] .lite-extra-screen{gap:10px}html[data-lite] .lite-extra-heading{min-height:62px}html[data-lite] #lite-extra-reward .lite-extra-emblem{width:60px;height:60px}}
+/* Match the shop cards while overriding the native dialog's compact button rules. */
+html.arcade-ui[data-lite] #stage #overlay[data-lite-reward=true] #lite-extra-reward .lite-extra-catalog-item{height:auto!important;min-height:190px!important;grid-template-rows:auto 56px 1fr 29px;padding:0!important;border:2px solid #5077f4!important;border-radius:13px!important;background-color:#b6e5fb!important;background-image:radial-gradient(circle at 20% 22%,#edffffbb 0 3px,transparent 4px),repeating-conic-gradient(#d6f3ff66 0 25%,transparent 0 50%)!important;background-size:auto,24px 24px!important;box-shadow:0 3px 0 #7fbbec!important}
+html.arcade-ui[data-lite] #stage #overlay[data-lite-reward=true] #lite-extra-reward .lite-extra-catalog-item[aria-pressed=true]{border-color:#9bce16!important;background-color:#d9f7af!important}
+html.arcade-ui[data-lite] #stage #overlay[data-lite-reward=true] #lite-extra-reward .lite-jackpot-tabs button{height:auto!important;min-height:40px!important;min-width:0!important;padding:5px 0!important;border:0!important;border-radius:20px!important;background:transparent!important;box-shadow:none!important}
+html.arcade-ui[data-lite] #stage #overlay[data-lite-reward=true] #lite-extra-reward .lite-jackpot-tabs button[aria-pressed=true]{background:#c4ff17!important;box-shadow:inset 0 -2px #8ccc30!important}

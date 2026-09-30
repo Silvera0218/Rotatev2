@@ -16,6 +16,7 @@
   ];
   const RULES = Object.freeze({
     levels: 5, scoreGoals: [45, 80, 120, 180, 240], diceTypes:[4,6,8,12], diceRouteVersion:root.LITE_DICE_ROUTES.design_version,
+    rewardMix:{twoNewChance:1/3,jackpotInclusionChance:0.08},
     dropLimit: 24, rotorDropChance: 0.06,
     coinReward: 5, clearCoins: 5, toolPrice: 5, shopSlots: 8, bonusPerCell: 5, buffs: BUFFS,
     tools: [
@@ -27,7 +28,7 @@
       ...SPECIALS.map(block=>({id:'block-'+block.id,name:block.name,blockEffect:block.id,description:'将当前下落块改造为'+block.name+'。'+block.description}))
     ],
     specials: SPECIALS,
-    rewardRoutes: [{ min: 3, max: 10, id: 'shop', name: '商店' }, { min: 11, max: 13, id: 'tool', name: '道具补给' }, { min: 14, max: 16, id: 'buff', name: 'Buff 选择' }, { min: 17, max: 24, id: 'special', name: '方块改造' }]
+    rewardRoutes: [{ min: 3, max: 10, id: 'shop', name: '商店' }, { min: 11, max: 13, id: 'tool', name: '道具补给' }, { min: 14, max: 16, id: 'buff', name: 'Buff 选择' }, { min: 17, max: 24, id: 'special', name: '方块改造' }, {id:'exchange',name:'置换工坊'}, {id:'gamble',name:'幸运赌桌'}, {id:'rest',name:'休息站'}, {id:'jackpot',name:'大成功'}]
   });
   root.ROTATION_LITE = RULES;
 
@@ -52,7 +53,7 @@
     p.reset = function (shapeSeed = 42, rewardSeed = shapeSeed) {
       this.lite = {
         coins: 0, tools: { ...emptyTools(), shovel: 1, swap: 1 }, extraDrops: 0, buffs: [], specials: [], specialToolsMigrated:true, lastPlacementIds: [], clears: 0,
-        roll: null, diceSides:null, diceRefreshes:1, seed: (rewardSeed ^ 0x6a09e667) >>> 0
+        roll: null, routeChoices:null, diceSides:null, diceRefreshes:1, seed: (rewardSeed ^ 0x6a09e667) >>> 0
       };
       const result = original.reset.call(this, shapeSeed, rewardSeed);
       this.pixelCards = {};
@@ -255,9 +256,20 @@
       if(!this.lite.diceSides)this.lite.diceSides=Array.from({length:3},()=>RULES.diceTypes[Math.floor(this.liteRandom()*RULES.diceTypes.length)]);
       return this.lite.diceSides;
     };
+    p.litePrepareRoutes = function () {
+      if(!this.lite.routeChoices){
+        const shuffle=pool=>{for(let i=pool.length-1;i>0;i--){const j=Math.floor(this.liteRandom()*(i+1));[pool[i],pool[j]]=[pool[j],pool[i]];}return pool;};
+        const newCount=this.liteRandom()<RULES.rewardMix.twoNewChance?2:1;
+        const jackpot=this.liteRandom()<RULES.rewardMix.jackpotInclusionChance;
+        const oldPool=shuffle(RULES.rewardRoutes.slice(0,4).map(route=>route.id));
+        const newPool=shuffle(['exchange','gamble',...(this.endless||this.stage<RULES.levels-1?['rest']:[])]);
+        this.lite.routeChoices=shuffle([...oldPool.slice(0,4-newCount),...(jackpot?['jackpot']:[]),...newPool.slice(0,newCount-(jackpot?1:0))]);
+      }
+      return this.lite.routeChoices;
+    };
     p.liteRewardRanges = function (sides=this.litePrepareDice()) {
       const entry=root.LITE_DICE_ROUTES.combinations[[...sides].sort((a,b)=>a-b).join('-')];
-      return RULES.rewardRoutes.map((route,i)=>({...route,min:i===0?3:entry.cuts[i-1]+1,max:entry.cuts[i]??entry.max}));
+      return this.litePrepareRoutes().map((id,i)=>({...RULES.rewardRoutes.find(route=>route.id===id),min:i===0?3:entry.cuts[i-1]+1,max:entry.cuts[i]??entry.max}));
     };
     p.liteRefreshDice = function () {
       if(!rewardPhase(this)||this.lite.roll?.entered||(this.lite.diceRefreshes??1)<=0)return false;
@@ -269,6 +281,7 @@
     };
     p.liteRoll = function () {
       if (!rewardPhase(this) || this.lite.roll) return false;
+      const routes=[...this.litePrepareRoutes()];
       // Roll all three dice first; later draws cannot affect their faces.
       const sides=[...this.litePrepareDice()];
       const values = sides.map(sides => 1 + Math.floor(this.liteRandom() * sides));
@@ -280,7 +293,13 @@
       const toolOptions=route==='tool'?this.liteRewardOptions('tool'):[];
       const specialOptions=route==='special'?this.liteRewardOptions('special'):[];
       const shopOffers = route === 'shop' ? this.liteCreateShop() : [];
-      this.lite.roll = { sides, values, total, route, entered: false, coins, tools, toolOptions, chosenTool:null, specialKind:null, specialOptions,buffOptions, shopOffers, chosenBuff: null, settled: !['buff','special','tool'].includes(route),freeRefreshes:1,adRefreshes:3,adReadyAt:null };
+      const exchangeOptions=route==='exchange'?this.liteRewardOptions('tool'):[];
+      const gamble=route==='gamble'?{pot:5,attempts:0,maxAttempts:2,lastDie:null,lost:false,collected:0}:null;
+      const jackpotOptions=route==='jackpot'?[{key:'coin',kind:'coin',item:null,amount:RULES.coinReward},...RULES.tools.map(tool=>({key:'tool:'+tool.id,kind:'tool',item:tool.id,amount:1})),...BUFFS.filter(buff=>!this.lite.buffs.includes(buff.id)).map(buff=>({key:'buff:'+buff.id,kind:'buff',item:buff.id,amount:1}))]:[];
+      const nextStage=this.stage+1,preview={...this,stage:nextStage,outline:null};
+      const restBuffs=route==='rest'?BUFFS.filter(buff=>!this.lite.buffs.includes(buff.id)):[];
+      const rest=route==='rest'?{stage:nextStage,score:RULES.scoreGoals[nextStage]??originalTarget.call(preview).goals[0],coins:RULES.clearCoins,buff:restBuffs.length?restBuffs[Math.floor(this.liteRandom()*restBuffs.length)].id:null,convertedCoins:restBuffs.length?0:RULES.coinReward,claimed:false}:null;
+      this.lite.roll = { sides, values, total, route, routes, entered: false, coins, tools, toolOptions, chosenTool:null, specialKind:null, specialOptions,buffOptions, shopOffers, exchangeOptions,chosenExchange:null,gamble,rest,jackpotOptions,jackpotChosen:null,chosenBuff: null, settled: route==='shop',freeRefreshes:1,adRefreshes:3,adReadyAt:null };
       this.events.push({ kind: 'lite-reward', reward: structuredClone(this.lite.roll) });
       return this.lite.roll;
     };
@@ -314,6 +333,60 @@
       const r=this.lite.roll;if(!rewardPhase(this)||!r?.entered||r.route!=='special'||r.settled||r.adReadyAt||!r.specialOptions?.includes(id))return false;
       this.lite.tools['block-'+id]=(this.lite.tools['block-'+id]||0)+1;
       r.specialKind=id;r.settled=true;this.events.push({kind:'lite-special',id});return true;
+    };
+    p.liteExchange = function (giveId,receiveId) {
+      const r=this.lite.roll;
+      if(!rewardPhase(this)||!r?.entered||r.route!=='exchange'||r.settled||giveId===receiveId||!RULES.tools.some(tool=>tool.id===giveId)||!(this.lite.tools[giveId]>0)||!r.exchangeOptions?.includes(receiveId))return false;
+      this.lite.tools[giveId]--;this.lite.tools[receiveId]=(this.lite.tools[receiveId]||0)+1;
+      r.chosenExchange={give:giveId,receive:receiveId};r.settled=true;
+      this.events.push({kind:'lite-extra-tool',id:receiveId});return true;
+    };
+    p.liteSkipExchange = function () {
+      const r=this.lite.roll;if(!rewardPhase(this)||!r?.entered||r.route!=='exchange'||r.settled)return false;
+      r.exchangeSkipped=true;r.settled=true;return true;
+    };
+    p.liteGamble = function () {
+      const r=this.lite.roll,g=r?.gamble;
+      if(!rewardPhase(this)||!r?.entered||r.route!=='gamble'||r.settled||!g||g.lost||g.attempts>=g.maxAttempts)return false;
+      g.lastDie=1+Math.floor(this.liteRandom()*6);g.attempts++;
+      if(g.lastDie>=4)g.pot*=2;else{g.pot=0;g.lost=true;}
+      this.events.push({kind:'lite-gamble',die:g.lastDie,pot:g.pot,lost:g.lost});return true;
+    };
+    p.liteCollectGamble = function () {
+      const r=this.lite.roll,g=r?.gamble;
+      if(!rewardPhase(this)||!r?.entered||r.route!=='gamble'||r.settled||!g)return false;
+      g.collected=g.pot;this.lite.coins+=g.collected;r.settled=true;
+      this.events.push({kind:'lite-gamble-collect',coins:g.collected});return true;
+    };
+    p.liteRest = function () {
+      const r=this.lite.roll;
+      if(!rewardPhase(this)||!r?.entered||r.route!=='rest'||r.settled||!r.rest||r.rest.claimed||(!this.endless&&this.stage>=RULES.levels-1))return false;
+      this.score+=r.rest.score;
+      if(r.rest.buff&&!this.lite.buffs.includes(r.rest.buff)){this.lite.buffs.push(r.rest.buff);this.events.push({kind:'lite-buff',id:r.rest.buff});}
+      else if(r.rest.buff)r.rest.convertedCoins=RULES.coinReward;
+      this.lite.coins+=r.rest.coins+r.rest.convertedCoins;r.rest.claimed=true;r.settled=true;
+      this.events.push({kind:'lite-rest',stage:r.rest.stage,score:r.rest.score});return true;
+    };
+    p.liteClaimJackpot = function (keys) {
+      const r=this.lite.roll;
+      if(!rewardPhase(this)||!r?.entered||r.route!=='jackpot'||r.settled||!Array.isArray(keys)||keys.length!==3||new Set(keys).size!==3)return false;
+      const choices=keys.map(key=>r.jackpotOptions?.find(option=>option.key===key));
+      if(choices.some(option=>!option||option.kind==='buff'&&this.lite.buffs.includes(option.item)))return false;
+      for(const option of choices){
+        if(option.kind==='coin')this.lite.coins+=option.amount;
+        else if(option.kind==='tool'){
+          this.lite.tools[option.item]=(this.lite.tools[option.item]||0)+option.amount;
+          this.events.push({kind:'lite-extra-tool',id:option.item});
+        }else if(option.kind==='buff'){
+          this.lite.buffs.push(option.item);this.events.push({kind:'lite-buff',id:option.item});
+        }
+      }
+      r.jackpotChosen=[...keys];r.settled=true;return true;
+    };
+    p.liteNextStageInfo = function () {
+      const stage=this.stage+(this.lite.roll?.route==='rest'&&this.lite.roll.rest?.claimed?2:1);
+      if(!this.endless&&stage>=RULES.levels)return {stage:RULES.levels-1,won:true,goal:null};
+      return {stage,won:false,goal:RULES.scoreGoals[stage]??originalTarget.call({...this,stage,outline:null}).goals[0]};
     };
     p.liteCreateShop = function () {
       const pools = [
@@ -355,18 +428,21 @@
     };
     p.liteNext = function () {
       if (!rewardPhase(this) || !this.lite.roll?.entered || !this.lite.roll.settled) return false;
-      if (!this.endless && this.stage === RULES.levels - 1) {
+      const next=this.liteNextStageInfo();
+      if (next.won) {
+        this.stage=next.stage;
         this.phase = 'won';
         this.events.push({ kind: 'won', stage: this.stage, score: this.score });
         return true;
       }
-      this.stage++;
+      this.stage=next.stage;
       this.checkpoint = 0;
       this.outline = null;
       this.board = [];
       this.active = null;
       this.lite.clears = 0;
       this.lite.roll = null;
+      this.lite.routeChoices=null;
       this.lite.diceSides=null;this.lite.diceRefreshes=1;
       this.lite.lastPlacementIds = [];
       this.lite.extraDrops = 0;

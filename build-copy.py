@@ -11,8 +11,8 @@ def replace_once(old, new):
     source = source.replace(old, new, 1)
 replace_once('<html lang="zh-CN"', '<html data-lite="true" lang="zh-CN"')
 replace_once('<title>ROTATION</title>', '<title>ROTATION · 骰子轻量版</title>')
-replace_once('</head>', '<link rel="stylesheet" href="./lite-ui.css"><link rel="stylesheet" href="./lite-integration.css"></head>')
-replace_once('<script>(()=>{', '<script>globalThis.LITE_DICE_ROUTES='+dice_routes+';</script><script src="./lite-rules.js"></script><script src="./lite-dice-geometry.js"></script><script src="./lite-dice.js"></script><script src="./lite-transition.js"></script><script src="./lite-blocks.js"></script><script src="./lite-acquisition.js"></script><script>(()=>{')
+replace_once('</head>', '<link rel="stylesheet" href="./lite-ui.css"><link rel="stylesheet" href="./lite-integration.css"><link rel="stylesheet" href="./lite-extra-rewards.css"></head>')
+replace_once('<script>(()=>{', '<script>globalThis.LITE_DICE_ROUTES='+dice_routes+';</script><script src="./lite-rules.js"></script><script src="./lite-dice-geometry.js"></script><script src="./lite-dice.js"></script><script src="./lite-transition.js"></script><script src="./lite-blocks.js"></script><script src="./lite-acquisition.js"></script><script src="./lite-extra-rewards.js"></script><script>(()=>{')
 replace_once('C5=RotationMechanics.makeScorer(C5);', 'C5=RotationMechanics.makeScorer(C5);globalThis.installRotationLite({Game:e9,mechanics:RotationMechanics});')
 replace_once(' function medallion(id){', ''' Object.assign(buffArt,{'extra-moves':buffArt.patience,'shovel-supply':buffArt.frontier_edge,'clear-score':buffArt.spare_change,'bonus-score':buffArt.opening_act});
  function medallion(id){''')

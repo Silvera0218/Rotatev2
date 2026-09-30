@@ -13,8 +13,10 @@ vm.runInContext(fs.readFileSync(new URL('../lite-rules.js', import.meta.url), 'u
 vm.runInContext('installRotationLite(api)', context);
 const { Game } = context.api;
 const make = () => new Game(42);
+const originalRoutes=['shop','tool','buff','special'];
 const scripted = (game, values) => {
   game.lite.diceSides=[8,8,8]; // Keep existing reward fixtures on their original three D8s.
+  game.lite.routeChoices=[...originalRoutes];
   let cursor = 0;
   game.liteRandom = () => values[cursor++] ?? 0.99;
 };
@@ -442,6 +444,7 @@ test('endless keeps native outline variety and budget, continues past five stage
 
 test('mixed dice prepare once, roll within each type, and support twelve-point faces',()=>{
   const g=make();g.phase='checkpoint-complete';let draws=[0,.3,.99],i=0;g.liteRandom=()=>draws[i++]??.99;
+  g.lite.routeChoices=[...originalRoutes];
   assert.deepEqual(Array.from(g.litePrepareDice()),[4,6,12]);const seedCalls=i;
   g.litePrepareDice();assert.equal(i,seedCalls);
   const r=g.liteRoll();assert.deepEqual(Array.from(r.sides),[4,6,12]);assert.deepEqual(Array.from(r.values),[4,6,12]);
@@ -450,6 +453,7 @@ test('mixed dice prepare once, roll within each type, and support twelve-point f
 
 test('every ordered mixed-dice combination maps all possible results to its balanced dynamic ranges',()=>{
   const kinds=[4,6,8,12],g=make();g.phase='checkpoint-complete';
+  g.lite.routeChoices=[...originalRoutes];
   for(const a of kinds)for(const b of kinds)for(const c of kinds){
     const sides=[a,b,c];g.lite.diceSides=sides;const ranges=g.liteRewardRanges(),counts=[0,0,0,0];
     assert.equal(ranges[0].min,3);assert.equal(ranges[3].max,a+b+c);
@@ -466,6 +470,7 @@ test('every ordered mixed-dice combination maps all possible results to its bala
 test('one dice refresh works before or after rolling, persists, never grants, and locks after entry',()=>{
   for(const rolled of [false,true]){
     const g=make();finishObjective(g);g.liteRandom=()=>0;const before=JSON.stringify({coins:g.lite.coins,tools:g.lite.tools,buffs:g.lite.buffs});
+    g.lite.routeChoices=[...originalRoutes];
     const previous=Array.from(g.litePrepareDice());if(rolled)g.liteRoll();
     assert.equal(g.liteRefreshDice(),true);assert.equal(g.lite.roll,null);assert.notDeepEqual(Array.from(g.lite.diceSides),previous);
     assert.equal(JSON.stringify({coins:g.lite.coins,tools:g.lite.tools,buffs:g.lite.buffs}),before);
@@ -475,4 +480,100 @@ test('one dice refresh works before or after rolling, persists, never grants, an
     assert.equal(resumed.liteNext(),true);assert.equal(resumed.lite.diceRefreshes,1);assert.equal(resumed.lite.diceSides,null);
   }
   const g=make();assert.equal(g.liteRefreshDice(),false);finishObjective(g);g.liteRandom=()=>0;g.liteRoll();g.liteEnterReward();assert.equal(g.liteRefreshDice(),false);
+});
+
+const extraReward=(route,stage=0,endless=false)=>{
+  const g=make();g.stage=stage;g.endless=endless;g.phase='checkpoint-complete';g.outline=null;
+  g.lite.routeChoices=[route,...originalRoutes.filter(id=>id!==route).slice(0,3)];g.lite.diceSides=[8,8,8];
+  g.liteRandom=()=>0;g.liteRoll();assert.equal(g.lite.roll.route,route);return g;
+};
+const restoreReward=g=>Object.assign(make(),{phase:g.phase,stage:g.stage,endless:g.endless,score:g.score,lite:JSON.parse(JSON.stringify(g.lite))});
+
+test('each checkpoint saves four distinct destinations; refreshing dice keeps them and final normal stage excludes rest',()=>{
+  const seen=new Set();
+  for(let seed=0;seed<100;seed++){
+    const g=new Game(Math.imul(seed,2654435761)),before=g.lite.seed;g.phase='checkpoint-complete';
+    const choices=Array.from(g.litePrepareRoutes());choices.forEach(id=>seen.add(id));
+    assert.equal(choices.length,4);assert.equal(new Set(choices).size,4);assert.notEqual(g.lite.seed,before);
+    assert.ok([2,3].includes(choices.filter(id=>originalRoutes.includes(id)).length));
+    const seedAfter=g.lite.seed;assert.deepEqual(Array.from(g.litePrepareRoutes()),choices);assert.equal(g.lite.seed,seedAfter);
+    g.litePrepareDice();g.liteRoll();assert.deepEqual(Array.from(g.lite.roll.routes),choices);
+    assert.equal(g.liteRefreshDice(),true);assert.deepEqual(Array.from(g.lite.routeChoices),choices);
+    const h=restoreReward(g);assert.deepEqual(Array.from(h.litePrepareRoutes()),choices);
+    const final=new Game(seed);final.stage=4;assert.ok(!final.litePrepareRoutes().includes('rest'));
+  }
+  assert.equal(seen.size,8);
+  const g=extraReward('shop');g.liteEnterReward();g.liteNext();assert.equal(g.lite.routeChoices,null);
+  g.reset();assert.equal(g.lite.routeChoices,null);
+});
+
+test('exchange trades one inventory item once, rejects invalid choices, persists, and allows an empty-inventory skip',()=>{
+  const g=extraReward('exchange'),r=g.lite.roll,receive=r.exchangeOptions.find(id=>id!=='shovel');
+  assert.equal(new Set(r.exchangeOptions).size,3);assert.equal(g.liteExchange('shovel',receive),false);
+  g.liteEnterReward();assert.equal(g.liteNext(),false);
+  const before=JSON.stringify(g.lite.tools);
+  for(const [give,get] of [['unknown',receive],['supply',receive],['shovel','unknown'],[receive,receive]])assert.equal(g.liteExchange(give,get),false);
+  assert.equal(JSON.stringify(g.lite.tools),before);
+  const h=restoreReward(g),prior=h.lite.tools[receive];assert.equal(h.liteExchange('shovel',receive),true);
+  assert.equal(h.lite.tools.shovel,0);assert.equal(h.lite.tools[receive],prior+1);assert.deepEqual({...h.lite.roll.chosenExchange},{give:'shovel',receive});
+  assert.ok(h.events.some(e=>e.kind==='lite-extra-tool'&&e.id===receive));
+  assert.equal(h.liteExchange('swap',receive),false);assert.equal(h.liteSkipExchange(),false);
+  const saved=restoreReward(h);assert.equal(saved.liteExchange('swap',receive),false);assert.equal(saved.liteNext(),true);assert.equal(saved.lite.tools[receive],prior+1);
+  const empty=extraReward('exchange');for(const id of Object.keys(empty.lite.tools))empty.lite.tools[id]=0;
+  empty.liteEnterReward();assert.equal(empty.liteSkipExchange(),true);assert.equal(empty.liteSkipExchange(),false);assert.equal(empty.liteNext(),true);
+});
+
+test('gamble grants only collected pot, caps at two attempts and losing never spends stored coins',()=>{
+  const g=extraReward('gamble');g.lite.coins=40;
+  assert.equal(g.liteGamble(),false);assert.equal(g.liteCollectGamble(),false);g.liteEnterReward();assert.equal(g.lite.coins,45);
+  assert.equal(g.liteNext(),false);g.liteRandom=()=>.99;
+  assert.equal(g.liteGamble(),true);assert.equal(g.lite.roll.gamble.lastDie,6);assert.equal(g.lite.roll.gamble.pot,10);assert.equal(g.lite.coins,45);
+  const h=restoreReward(g);h.liteRandom=()=>.5;assert.equal(h.liteGamble(),true);assert.equal(h.lite.roll.gamble.lastDie,4);assert.equal(h.lite.roll.gamble.pot,20);
+  assert.equal(h.liteGamble(),false);assert.equal(h.liteCollectGamble(),true);assert.equal(h.lite.coins,65);
+  const saved=restoreReward(h);assert.equal(saved.liteCollectGamble(),false);assert.equal(saved.liteGamble(),false);assert.equal(saved.liteNext(),true);
+  const lost=extraReward('gamble');lost.lite.coins=40;lost.liteEnterReward();lost.liteRandom=()=>.99;lost.liteGamble();lost.liteRandom=()=>0;
+  assert.equal(lost.liteGamble(),true);assert.equal(lost.lite.roll.gamble.lost,true);assert.equal(lost.lite.roll.gamble.pot,0);assert.equal(lost.lite.coins,45);
+  assert.equal(lost.liteGamble(),false);assert.equal(lost.liteCollectGamble(),true);assert.equal(lost.lite.coins,45);
+  const keep=extraReward('gamble');keep.liteEnterReward();assert.equal(keep.liteCollectGamble(),true);assert.equal(keep.lite.coins,10);assert.equal(keep.lite.roll.gamble.attempts,0);
+});
+
+test('rest credits exactly the next goal once, skips it, retains inventory, and preserves preview state',()=>{
+  const g=extraReward('rest');g.score=100;g.lite.tools['block-coin']=2;const outline=g.target;
+  const before=JSON.stringify({stage:g.stage,outline:g.outline,score:g.score});
+  assert.deepEqual({...g.liteNextStageInfo()},{stage:1,won:false,goal:80});
+  assert.equal(JSON.stringify({stage:g.stage,outline:g.outline,score:g.score}),before);assert.equal(g.liteRest(),false);
+  assert.equal(g.lite.roll.rest.score,80);g.liteEnterReward();assert.equal(g.liteNext(),false);
+  assert.equal(g.liteRest(),true);assert.equal(g.score,180);assert.equal(g.liteRest(),false);
+  assert.equal(g.lite.coins,10);assert.equal(g.lite.buffs.length,1);assert.equal(g.lite.buffs[0],g.lite.roll.rest.buff);
+  assert.deepEqual({...g.liteNextStageInfo()},{stage:2,won:false,goal:120});
+  const h=restoreReward(g);assert.equal(h.liteRest(),false);assert.equal(h.liteNext(),true);assert.equal(h.stage,2);assert.equal(h.goal,120);assert.equal(h.score,180);assert.equal(h.checkpointScore,0);assert.equal(h.lite.tools['block-coin'],2);
+});
+
+test('rest saves its random buff, substitutes coins when all buffs are owned, and never double grants',()=>{
+  const g=extraReward('rest'),chosen=g.lite.roll.rest.buff;g.liteEnterReward();const h=restoreReward(g);
+  h.liteRandom=()=>{throw new Error('Claim must not reroll');};assert.equal(h.liteRest(),true);assert.equal(h.lite.buffs[0],chosen);assert.equal(h.lite.coins,10);assert.equal(h.liteRest(),false);
+  const full=make();full.lite.buffs=['extra-moves','shovel-supply','clear-score','bonus-score'];full.phase='checkpoint-complete';full.lite.routeChoices=['rest','shop','tool','buff'];full.lite.diceSides=[8,8,8];full.liteRandom=()=>0;
+  full.liteRoll();assert.equal(full.lite.roll.rest.buff,null);assert.equal(full.lite.roll.rest.convertedCoins,5);full.liteEnterReward();assert.equal(full.liteRest(),true);assert.equal(full.lite.coins,15);assert.equal(full.lite.buffs.length,4);
+});
+
+test('rest skipping the final normal stage wins once, while endless skips use native goal generation',()=>{
+  const g=extraReward('rest',3);g.liteEnterReward();assert.equal(g.lite.roll.rest.score,240);g.liteRest();
+  assert.deepEqual({...g.liteNextStageInfo()},{stage:4,won:true,goal:null});assert.equal(g.liteNext(),true);assert.equal(g.stage,4);assert.equal(g.phase,'won');assert.equal(g.liteNext(),false);assert.equal(g.score,240);
+  const h=extraReward('rest',7,true),baseline=make();baseline.endless=true;baseline.outlineSeed=h.outlineSeed;baseline.stage=8;baseline.outline=null;
+  assert.equal(h.lite.roll.rest.score,baseline.goal);const credited=baseline.goal;h.liteEnterReward();h.liteRest();
+  baseline.stage=9;baseline.outline=null;assert.deepEqual({...h.liteNextStageInfo()},{stage:9,won:false,goal:baseline.goal});
+  assert.equal(h.liteNext(),true);assert.equal(h.stage,9);assert.equal(h.phase,'play');assert.equal(h.goal,baseline.goal);assert.equal(h.score,credited);
+});
+
+test('jackpot lets players choose three distinct catalogue rewards atomically and persists claims',()=>{
+  const g=extraReward('jackpot'),keys=['coin','tool:block-bonus','buff:clear-score'];
+  assert.equal(g.lite.roll.jackpotOptions.length,15);assert.equal(g.liteClaimJackpot(keys),false);g.liteEnterReward();
+  const before=JSON.stringify({coins:g.lite.coins,tools:g.lite.tools,buffs:g.lite.buffs});
+  for(const invalid of [[],['coin'],['coin','coin','tool:shovel'],['coin','tool:shovel','invalid'],null])assert.equal(g.liteClaimJackpot(invalid),false);
+  assert.equal(JSON.stringify({coins:g.lite.coins,tools:g.lite.tools,buffs:g.lite.buffs}),before);
+  const h=restoreReward(g);assert.equal(h.liteClaimJackpot(keys),true);assert.equal(h.lite.coins,10);assert.equal(h.lite.tools['block-bonus'],1);assert.ok(h.lite.buffs.includes('clear-score'));assert.deepEqual(Array.from(h.lite.roll.jackpotChosen),keys);
+  assert.ok(h.events.some(e=>e.kind==='lite-extra-tool'&&e.id==='block-bonus'));assert.ok(h.events.some(e=>e.kind==='lite-buff'&&e.id==='clear-score'));
+  const saved=restoreReward(h);assert.equal(saved.liteClaimJackpot(keys),false);assert.equal(saved.liteNext(),true);assert.equal(saved.lite.tools['block-bonus'],1);
+  const owned=extraReward('jackpot');owned.liteEnterReward();owned.lite.buffs.push('clear-score');assert.equal(owned.liteClaimJackpot(keys),false);assert.equal(owned.lite.coins,5);assert.equal(owned.lite.tools['block-bonus'],0);
+  const full=make();full.lite.buffs=['extra-moves','shovel-supply','clear-score','bonus-score'];full.phase='checkpoint-complete';full.lite.routeChoices=['jackpot','shop','tool','buff'];full.lite.diceSides=[8,8,8];full.liteRandom=()=>0;full.liteRoll();assert.equal(full.lite.roll.jackpotOptions.length,11);full.liteEnterReward();assert.equal(full.liteClaimJackpot(['tool:shovel','tool:swap','tool:repair']),true);
 });
