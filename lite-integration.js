@@ -246,10 +246,7 @@ function liteCreateReward(){
     const button=document.createElement('button');button.type='button';button.dataset.category=id;button.textContent=label;button.setAttribute('aria-pressed','false');
     button.onclick=()=>{
       if(L.lite.roll?.route!=='shop'||(L.lite.roll.shopCategory||'all')===id)return;
-      liteLeaveReward(button,()=>{L.lite.roll.shopCategory=id;liteUpdateReward();I('lite-shop-offers').scrollTop=0;liteSaveSafe();},{region:()=>{
-        const shop=I('lite-shop').getBoundingClientRect(),nav=categories.getBoundingClientRect();
-        return{x:shop.x,y:nav.bottom,width:shop.width,height:Math.max(0,shop.bottom-nav.bottom)};
-      }});
+      L.lite.roll.shopCategory=id;liteUpdateReward();I('lite-shop-offers').scrollTop=0;liteSaveSafe();
     };categories.append(button);
   }
   I('lite-shop-offers').before(categories);
